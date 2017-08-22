@@ -1,0 +1,82 @@
+========================
+INTRODUCTION
+========================
+
+Fusor Characteristics
+- Spherical Chamber, no leaks, pressurized with D2 gas, grounded.
+- Spherical Grid, made of very fine mesh so that there is no 
+  collisions between the grid and any particles.
+- XXX spherical symetry
+
+Initial Conditions
+- uniform distribution of the D2 gas
+- voltage has just been applied to grid
+- zero current flowing
+- gas and chamber are at room temperature
+
+Parameters
+- Gas Pressure
+- Grid Voltage
+
+Questions
+- Is D2 atomic or molecular, does this matter?
+
+========================
+THE ELECTRONS
+========================
+
+Outside the grid ...
+
+Once the grid voltage is high enough, the large electric field outisde the grid
+will interact with the D2 atoms that are near the exterior of the grid. The electons
+will be repelled with enough force so that they are stripped from the proton and
+accelerated radially outward toward the chamber wall.
+
+Back at the grid the situation has changed. There are now many D2 nucleus near the
+grid, without electrons. These protons will be attacted toward the grid and will 
+help liberate electrons from the grid itself. There is an abundance of excess electrons
+on the grid, but not enough so that these electrons can leave the grid on their own.
+The D2 nucleus protons near the grid provide an additional force to liberate electrons
+from the grid. 
+
+These free electrons will gain enough energy as they are accelerated toward the
+chamber walls to ionize other D2 atoms that they may collide with.
+
+Inside the grid ...
+
+The XXX theory says that there is no electric field inside a charged metal container.
+Our grid is similar to a charged metal container, so one would suspect that the electric
+field from the grid does not extend inside of the grid. However since fusor grids have gaps
+(my fusor grid is three wire loops, so has large gaps), the electric field from the grid will
+also extend a little inside of the grid. So what this means is that electrons can be liberated
+from the grid on the inside via the same mechanism that is discussed above, outside the grid.
+
+The electrons liberated from the grid on the inside are likely to have a different fate than 
+the electrons that were liberated on the outside. Before there is a build up of D2 ions at the
+center of the chamber these electrons will meander accross the inside of the grid, and eventaully
+find there way to the outisde, and be accelerated to the chamber wall. But, after there is a
+concentration of D2 ions at the center of the chamber, these electrons will likely be 
+captured by a D2 ion, and release a photon.
+
+Summary ...
+
+To summarize, the electrons liberated from the grid will either:
+1) Be accelerated toward the chamber wall and reach the chamber wall without 
+   interacting with any D2 atoms along the way.
+2) Be accelerated toward the chamber wall and ionize one or more D2 atoms along the way.
+   These ionized D2 will release their electrons, which may ionize additional D2 in a
+   cascade. For example the single electron that was liberated from the grid may 
+   cause 3 ionizations, and thus 4 electrons reaching the chamber wall.
+3) Be released inside the grid, and be attracted toward the high concentration of 
+   D2 ions that are present inside the grid (probably highest concentration at the center
+   of the chamber). These electrons will combine with the ions and a photon will be released.
+
+Prior to the plasma igniting the electrons that leave the grid will fall into 
+categories 1 and 2 above. So more electrons will be returning to the power supply than are
+leaving the power supply. Obviously this can not go on for long, and a balance needs to
+be reached. After the plasma ignites (category 3), and reaches a steady state: 
+- the current entering the chamber must equal the current leaving the chamber
+- the D2 ionization rate must equal the D2 capture rate
+  XXX what is oppoisite if ionziation?
+
+Modelling the electrons ...
