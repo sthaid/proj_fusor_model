@@ -2,27 +2,64 @@
 INTRODUCTION
 ========================
 
+This model should help understand the details of the interactions in the fusor: examples:
+- the pressure and temperature of the ions at the center of the chamber
+- the blue glue
+- voltage fluctuations
+Can also vary parameters to see what yields most fusion
+
+This is a theory ...
+  High School Physics
+
+What I'm trying to do.
+
+How a fusor works.
+
+Idealized fusor to be modelled.   ...
+
+Outiline of the remainder of the document
+
+DC power supply
+
+
+XXX the secondary affects of the HE and neutrons creaeted are ignored in the model
+
+
+TERMINOLOGY SECTION
+- atoms
+- ions
+- electrons
+
+
+XXX redo this section stating would is being attempted
+
+XXX this is all really about the model and should be cover later
 Fusor Characteristics
 - Spherical Chamber, no leaks, pressurized with D2 gas, grounded.
 - Spherical Grid, made of very fine mesh so that there is no 
   collisions between the grid and any particles.
 - XXX spherical symetry
+- XXX power supply DC
+- XXX no pump or gas flow
+- XXX no contaminants released from grid or chamber wall
 
 Initial Conditions
 - uniform distribution of the D2 gas
-- voltage has just been applied to grid
+- zero voltage 
 - zero current flowing
 - gas and chamber are at room temperature
 
 Parameters
 - Gas Pressure
 - Grid Voltage
+- chamber size
+- grid size
 
 Questions
 - Is D2 atomic or molecular, does this matter?
 
 ========================
-THE ELECTRONS
+ELECTRONS
 ========================
 
 Outside the grid ...
@@ -47,7 +84,7 @@ Inside the grid ...
 The XXX theory says that there is no electric field inside a charged metal container.
 Our grid is similar to a charged metal container, so one would suspect that the electric
 field from the grid does not extend inside of the grid. However since fusor grids have gaps
-(my fusor grid is three wire loops, so has large gaps), the electric field from the grid will
+(my real fusor grid is just three wire loops, which has large gaps), the electric field from the grid will
 also extend a little inside of the grid. So what this means is that electrons can be liberated
 from the grid on the inside via the same mechanism that is discussed above, outside the grid.
 
@@ -67,16 +104,101 @@ To summarize, the electrons liberated from the grid will either:
    These ionized D2 will release their electrons, which may ionize additional D2 in a
    cascade. For example the single electron that was liberated from the grid may 
    cause 3 ionizations, and thus 4 electrons reaching the chamber wall.
-3) Be released inside the grid, and be attracted toward the high concentration of 
+3) XXX released inside the grid but not interact with D2 ion, maybe none there yet, 
+   and .... then become category 1 or 2
+4) Be released inside the grid, and be attracted toward the high concentration of 
    D2 ions that are present inside the grid (probably highest concentration at the center
    of the chamber). These electrons will combine with the ions and a photon will be released.
 
 Prior to the plasma igniting the electrons that leave the grid will fall into 
-categories 1 and 2 above. So more electrons will be returning to the power supply than are
+categories 1 and 2 XXX nd 3 above. So more electrons will be returning to the power supply than are
 leaving the power supply. Obviously this can not go on for long, and a balance needs to
-be reached. After the plasma ignites (category 3), and reaches a steady state: 
+be reached. After the plasma ignites (category 4), and reaches a steady state: 
 - the current entering the chamber must equal the current leaving the chamber
 - the D2 ionization rate must equal the D2 capture rate
   XXX what is oppoisite if ionziation?
+
+========================
+IONS     
+========================
+
+D2 ions are created either:
+- the D2 atoms near the grid have their electrons stripped by the
+  high electric field that exists near the grid; this probably happens 
+  for just a short while prior to the plasma igniting
+- the D2 atoms somewhere between the grid and chamber wall are ionized
+  by an impact with an electron that has been accelerated away from the 
+  grid
+
+The D2 ions that were created near the grid should stay there. If one of these
+D2 ions were to move toward the center of the grid it will be repelled by the
+positively charge that has accumulated at and around the grid center. And if the
+D2 ion were to move toward the chamber wall it would be pulled back towards the
+grid by the electric field that the grid is generating. Other possibilities are
+these D2 ions could be struck by the D2 ions that have been propelled to a high 
+velocity toward the center of the chamber, or these D2 ions could absorb an electron.
+
+The D2 ions that are created a substantial distance outside of the grid are 
+most important for creating the plasma, and fusion. These ions are accelerated
+by the grid's electric field toward the grid. When they cross from outside the
+grid to inside the grid's electric field no longer influences their path. At this
+point their path is influenced by the repulsive force of the ions that are 
+closer to the chamber center than it is, and by collisions with the D2 ions and D2
+atoms that it is may encounter. The following scenarios are possible:
+- if this ion's trajectory is not close to chamber center then it could be deflected
+  away by the positive charges that are present near chamber center
+- if this ion's trajectory is close to chamber center it could:
+  - pass straight through with no interactions, it would then pass outside the grid and
+    achieve the same distance from the grid at which it started it's inward jouney
+  - direct impact another D2 ion with sufficient velocity to fuse and create HE 
+    XXX what is the reaction
+  - close pass to other D2 ions so that it looses velocity and changes direction (repeats), 
+    and becomes part of the volume of D2 ion gas that accumulates at the center of the 
+    chamber. The ions in the center of this gas will stay their for a while due to collisions
+    with the ions around it. The ions near the edge of the gas will be repelled by the
+    positive charge and be expelled from within the grid. Once outside the grid they will be
+    pulled back inside; but not with the same high velocity as the ions that were created
+    at a distance from the grid.
+- If an electron is absorbed by the ion then it will become a D2 atom, and release a 
+  photon. This D2 atom will eventually migrate out of the D2 ion gas and become part of the
+  lower pressure D2 atom gas that is present throughout the chamber.
+
+========================
+ATOMS    
+========================
+
+The initial condition is the chamber is filled with the D2 atoms evenly
+distributed at an initial pressure. The Ideal Gas Law can be used to determine
+how many atoms there are. The velocities of the atoms is determined by XXX based
+on them being at room temperature.
+
+The excitement begins when the voltage is applied to the grid and current begins to flow.
+Then atoms become ions, the ions are pulled toward the chamber's center by the grid's
+electric field, where they collide and possibly fuse. The ions near the center of the
+chamber will capture electrons, release phontons, and become atoms again.
+
+The atoms that are created from the ions near the center of the chamber will 
+migrate away from the center. How long this migration takes depends on how many
+interactions are taking place between the ions and atoms present at the center of the
+chamber. 
+
+Atoms will try to approach the center of the chamber. They will not be repelled
+by the positive charge at the center, but they will probably collide with the higher
+ions that are at a higher pressure and density and be prevented from making their
+way very far into the ion gas at chamber center.
+
+
+========================
+POWER SUPPLY
+========================
+
+The power supply 
+
+
+
+
+========================
+MODEL           
+========================
 
 Modelling the electrons ...
