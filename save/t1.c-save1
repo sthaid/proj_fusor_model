@@ -1,0 +1,547 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <unistd.h>
+
+#include <assert.h>
+#include <errno.h>
+#include <string.h>
+#include <math.h>
+#include <sys/queue.h>
+
+#define MTORR_TO_PASCAL(x)  ((x) * 0.133322) 
+#define IN3_TO_M3(x)        ((x) * 1.63871e-5)
+#define F_TO_C(x)           (((x) - 32.) * (5. / 9.))
+#define F_TO_K(x)           (F_TO_C(x) + 273.15)
+#define IN_TO_M(x)          ((x) * 0.0254)
+#define M_TO_IN(x)          ((x) / 0.0254)
+
+#define M3_TO_C3(x)         ((x) * 1e6)
+
+#define R    8.3145   // universal gas constant  J/mol K
+#define NA   6.0221E23   // avogadro's number
+
+#define k  1.38066e-23    // Boltzmann constant J/K
+
+#define AMU_TO_KG(x)    ((x) * 1.66054e-27)
+
+// Isotopes of Hydrogen
+//https://www.boundless.com/chemistry/textbooks/boundless-chemistry-textbook/nonmetallic-elements-21/hydrogen-148/isotopes-of-hydrogen-573-3644/
+#define D_AMU 2.014102
+
+#define ELECTRON_CHARGE  1.60217662e-19   // Coulombs or C
+#define ELECTRON_MASS    9.10938356e-31   // kilograms  or kg
+
+#define GRID_VOLTAGE 30000.0
+#define GRID_RADIUS  IN_TO_M(0.75)   
+#define CHAMBER_RADIUS IN_TO_M(3)
+
+//  1 Amp = 1 Coulomb / Sec
+
+
+// http://physics.bu.edu/~duffy/PY106/Potential.html
+//  V = ke Q / r
+
+// Coulomb's Law
+//    F = ke q1 * q2 / r^2
+//      (ke = 8.99×10^9 N m2 C−2)
+//     8.987552e9  N m^2 C^-2
+
+#define ke  8.987552e9  // Coulomb's Constant  N m^2 C^-2
+
+#define NANOSECOND  1e-9
+
+#define JOULES_TO_EV(x)    ((x) * 6.242e+18)
+
+#define h   6.62607004e-34 // m2 kg / s   Planck constant
+#define c   299792458.0    //  m / s      Speed of light
+
+#define M_TO_NM(x)   ((x) * 1e9)
+
+// make comment section to summarize the equations
+
+void electron_model(void);
+double cross_section(double incident_electron_energy_ev) ;
+double atoms_per_cubic_meter(void);
+
+int main(int argc, char **argv)
+{
+#if 0
+    // test cross section routine
+    while (true) {
+        char s[100];
+        double ev;
+        printf("enter ev: ");
+        if (fgets(s,sizeof(s),stdin) == NULL) {
+            return 0;
+        }
+        if (sscanf(s, "%lf", &ev) != 1) {
+            continue;
+        }
+        printf("ev = %lf  cs = %lf\n",
+            ev, cross_section(ev)*1e20);
+    }
+    exit(0);
+#endif
+
+    electron_model();
+    exit(0);
+
+    // Ideal Gas Law
+    //    PV = nRT
+    // http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/idegas.html
+
+    double P = MTORR_TO_PASCAL(15);
+    double V = IN3_TO_M3(1.333*M_PI*3*3*3);
+    double T = F_TO_K(70);
+    double n, N;
+
+    n = (P * V) / (R * T);
+    N = n * NA;
+    printf("P  = %lg  PASCAL\n", P);
+    printf("V  = %lg  CUBIC METERS   %lg CC\n", V, M3_TO_C3(V));
+    printf("T  = %lg  KELVIN\n", T);
+    printf("n  = %lg  MOLES\n", n);
+    printf("N  = %lg  ATOMS   %lg ATOMS/CC\n", N,  N / M3_TO_C3(V));
+    printf("N  = %lg  ATOMS   %lg ATOMS/CU_M\n", N,  N / V);
+    
+    printf("\n------------------------\n\n");
+
+    // Kinetic Temperature
+    //      1    2    3
+    //     --- mv  = --- kT
+    //      2         2
+    //
+    //     v = sqrt(3 * k * T / m)
+    //
+    // http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/kintem.html
+
+    double v;
+    double m = AMU_TO_KG(D_AMU);
+    //double m = AMU_TO_KG(28);  // XXX nitrogen  N2,  answer shoulb be   about 500 m/s
+
+    v = sqrt(3. * k * T / m);
+    printf("T  = %lg  KELVIN\n", T);
+    printf("m  = %lg  KG\n", m);
+    printf("v  = %lg  m/sec\n", v);
+
+    printf("\n------------------------\n\n");
+
+    //http://physics.bu.edu/~duffy/PY106/Potential.html
+    // electron accel
+    //  V = ke Q / r
+    double r, Q, a, F, t, dt, wavelength, E, v1;
+
+    r = GRID_RADIUS;   
+    Q = GRID_VOLTAGE * GRID_RADIUS / ke;
+    F = ke * Q * ELECTRON_CHARGE / (r * r);
+    printf("r = %lg\n", r);
+    printf("Q = %lg coulombs\n", Q);
+    printf("F = %lg newtons\n", F);
+
+    a = F / ELECTRON_MASS;
+    printf("a = %lg\n",a);
+
+    a = GRID_VOLTAGE * GRID_RADIUS * ELECTRON_CHARGE / ELECTRON_MASS / (r * r);
+    printf("a = %lg\n",a);
+
+    r = GRID_RADIUS;   
+    v = 0;
+    dt = NANOSECOND / 1000;
+    while (1) {
+        a = GRID_VOLTAGE * GRID_RADIUS * ELECTRON_CHARGE / ELECTRON_MASS / (r * r);
+        v1 = v;
+        v += a * dt;
+        r +=  (v1+v)/2 * dt;
+
+        t += dt;
+        E = .5*ELECTRON_MASS*v*v;
+        printf("t = %10lg   r = %10lg   v = %10lg   a=%10lg   ev = %10lg \n", 
+               t, r, v, a, JOULES_TO_EV(E));
+
+        if (r > CHAMBER_RADIUS) {
+            //  E = hf = h c / wavelength
+            // wavelength = h * c / E
+            wavelength = h * c / E;
+            printf("wavelength %lg nanometers\n", M_TO_NM(wavelength));
+            break;
+        }
+    }
+
+    // X-rays with high photon energies (above 5–10 keV, 
+    // below 0.2–0.1 nm wavelength) are called hard X-rays, 
+    // while those with lower energy are called soft X-rays
+
+    // hard x-rays                0.01 - 0.2  nm
+    // soft x-rays                0.2  - 10   nm
+    // ultraviolet                10   - 400  nm
+    // visible light              400  - 700  nm    400 violet,  700 red
+        
+
+    return 0;
+}
+
+
+// Electron Impact Ionization Cross Sections
+// https://physics.nist.gov/cgi-bin/Ionization/ion_data.php?id=HI&ision=I&initial=&total=Y
+
+#define ELECTRONS_PER_COULOMB  (1. / ELECTRON_CHARGE)
+
+typedef struct modelelectron_s {
+    int64_t id;
+    double v;  // radial velocity
+    double r;  // radial position 
+    LIST_ENTRY(modelelectron_s) entries;
+} modelelectron_t;
+
+void electron_model(void)
+{
+    // assume
+    // - 30 KV at grid
+    // - constant pressure of 15 mTorr deuterium gas
+    // - creation of ions is tallyed but the ions 
+    //   do not subtract from the D gas    
+    // - the D gas atoms are stationary
+    // - the electrons velocities are always radial
+
+    //#define MODEL_DURATION (1000 * dt)  // XXX make longer
+    #define MODEL_DURATION 1.0 // seconds
+
+
+    double t, dt, I, electrons_per_sec, electrons_per_dt;
+    double electrons_per_modelelectron;
+
+    int64_t i;
+    int64_t num_active_me = 0;
+    int64_t num_created_me = 0;
+    int64_t num_ionized_me = 0;
+    int64_t num_left_chamber_me = 0;
+
+
+    #define MAX_MODELELECTRON 1000000
+    static modelelectron_t modelelectron[MAX_MODELELECTRON];
+
+    dt = NANOSECOND / 1000;
+    I = .005;  // 5 mA
+
+    electrons_per_sec = ELECTRONS_PER_COULOMB * I;
+    electrons_per_dt  = electrons_per_sec * dt;
+    electrons_per_modelelectron = electrons_per_dt;
+
+    printf("dt                           = %lg\n", dt);
+    printf("I                            = %lg\n", I);
+    printf("electrons_per_sec            = %lg\n", electrons_per_sec);
+    printf("electrons_per_dt             = %lg\n", electrons_per_dt);
+    printf("electrons_per_modelelectron  = %lg\n", electrons_per_modelelectron);
+
+    // init list of free modelelectrons
+    memset(modelelectron, 0, sizeof(modelelectron));
+    for (i = 0; i < MAX_MODELELECTRON; i++) {
+        modelelectron[i].id = i;
+    }
+    LIST_HEAD(free_head_s, modelelectron_s) free_head;
+    LIST_INIT(&free_head);
+    for (i = MAX_MODELELECTRON; i >= 0; i--) {
+        LIST_INSERT_HEAD(&free_head, &modelelectron[i], entries);
+    }
+
+    // init list of active modelelectrons
+    LIST_HEAD(active_head_s, modelelectron_s) active_head;
+    LIST_INIT(&active_head);
+    num_active_me = 0;
+
+    for (t = 0; t < MODEL_DURATION; t += dt) {
+        //printf("----------- t = %lg --------------\n", t);
+
+        // create a modelelectron at the grid, 
+        // a modelelectron represents a large number of real electrons
+        // XXX if (t == 0) 
+        { 
+        modelelectron_t * me = free_head.lh_first;
+        LIST_REMOVE(me, entries);
+        LIST_INSERT_HEAD(&active_head, me, entries);
+        me->v = 0;
+        me->r = GRID_RADIUS;
+        num_active_me++;
+        num_created_me++;
+        //printf("created me %p\n", me);
+        }
+
+        // loop over all model electrons
+        // XXX need to be able to remove and insert list while processing
+        modelelectron_t *me, *me_next;
+        for (me = active_head.lh_first; me != NULL; me = me_next) {
+            double a, v1;
+
+            // XXX comment
+            me_next = me->entries.le_next;
+
+            // printf("processing me %p: ", me);
+
+            // update the radius
+            a = GRID_VOLTAGE * GRID_RADIUS * ELECTRON_CHARGE / ELECTRON_MASS / (me->r * me->r);
+            v1 = me->v;
+            me->v += a * dt;
+            me->r += ((v1 + me->v) / 2) * dt;
+
+#if 0
+            if (me->id == 0) {
+               printf("me %ld: v=%lg  ev=%lg  r_from_grid=%lg  %lf inches\n", 
+                   me->id,
+                   me->v, 
+                   JOULES_TO_EV(.5*ELECTRON_MASS*me->v*me->v),
+                   me->r - GRID_RADIUS,
+                   M_TO_IN(me->r - GRID_RADIUS));
+            }
+#endif
+
+            // if radius is outside chamber then 
+            // - keep track of the number of electrons that have left the chamber
+            // - keep track of histogram of the energies of the electrons that leave the chamber
+            // - remove this model electron
+            // - continue
+            // endif
+            if (me->r >= CHAMBER_RADIUS) {
+                //double ev = JOULES_TO_EV(.5*ELECTRON_MASS*me->v*me->v);
+                LIST_REMOVE(me, entries);
+                LIST_INSERT_HEAD(&free_head, me, entries);
+                num_active_me--;
+                num_left_chamber_me++;
+
+                //printf("me %ld: has left chamber at %lg ev   num_active_me = %ld\n", 
+                        //me->id, ev, num_active_me);
+                continue;
+            }
+
+            // determine whether this modelectron ionizes D atoms
+            // - get Electron Impact Ionization Cross Section
+            // - use a uniform distribution random number to determine whether
+            //   ionization occurs
+            // https://physics.nist.gov/cgi-bin/Ionization/atom.php?element=H
+
+            { double ev, cs, apcm, d, fraction;
+
+            ev = JOULES_TO_EV(.5*ELECTRON_MASS*me->v*me->v),
+            cs = cross_section(ev);
+            apcm = atoms_per_cubic_meter();
+            d = me->v * dt;
+
+            fraction = apcm * d * cs;
+            //printf("   fraction = %lg  v=%lg  r_from_grid=%lg  id=%ld\n", 
+                //fraction, me->v, me->r-GRID_RADIUS, me->id);
+
+            if ((double)random()/RAND_MAX <= fraction) {
+                num_ionized_me++;
+                printf("IONIZATION  t=%lg  active=%ld  created=%ld  ionized=%ld  fract=%f  left_chamber=%ld  "
+                       "excess=%ld\n",
+                    t, num_active_me, num_created_me, num_ionized_me, 
+                    (double)num_ionized_me/num_created_me,
+                    num_left_chamber_me,
+                    num_created_me - num_left_chamber_me);
+            }
+            }
+
+            // if ionization occurs
+            // - determine the energy of the current and new modelectron by
+            //   first subtracting the ionization energy and then equally dividing
+            //   the remaining energy between the current and new modelelectrons
+            // - create the new modelelectron 
+            // - keep track of the location of the ionization events in a histogram
+            // endif
+        }
+    }
+
+    // display results
+    // - current leaving the chamber
+    // - histogram of the location of the ionizations,  units ionizations/sec/m^3
+    // - histogram of the electron density,  units n/m^3
+
+
+}
+
+double cross_section(double incident_electron_energy_ev) 
+{
+    // returns cross section in m^2
+
+    // https://physics.nist.gov/cgi-bin/Ionization/ion_data.php?id=HI&ision=I&initial=&total=Y
+    static struct {
+        double ev;
+        double cs;   // cross_section  1e-16 cm2
+    } tbl[] = {
+        { 14.60,  0.04430  },
+        { 14.80,  0.05350  },
+        { 15.00,  0.06260  },
+        { 15.10,  0.06720  },
+        { 15.20,  0.07180  },
+        { 15.40,  0.08090  },
+        { 15.60,  0.09000  },
+        { 15.90,  0.10360  },
+        { 16.10,  0.11260  },
+        { 16.40,  0.12600  },
+        { 16.60,  0.13490  },
+        { 16.90,  0.14800  },
+        { 17.10,  0.15670  },
+        { 17.40,  0.16950  },
+        { 17.60,  0.17790  },
+        { 17.90,  0.19040  },
+        { 18.10,  0.19850  },
+        { 18.40,  0.21060  },
+        { 18.70,  0.22250  },
+        { 19.00,  0.23410  },
+        { 19.30,  0.24540  },
+        { 19.60,  0.25650  },
+        { 20.00,  0.27100  },
+        { 20.40,  0.28500  },
+        { 20.90,  0.30190  },
+        { 21.40,  0.31820  },
+        { 22.00,  0.33690  },
+        { 22.60,  0.35470  },
+        { 23.30,  0.37440  },
+        { 24.00,  0.39300  },
+        { 24.80,  0.41290  },
+        { 25.60,  0.43150  },
+        { 26.60,  0.45300  },
+        { 27.30,  0.46700  },
+        { 28.30,  0.48560  },
+        { 29.30,  0.50260  },
+        { 30.50,  0.52120  },
+        { 31.60,  0.53650  },
+        { 32.80,  0.55170  },
+        { 34.10,  0.56630  },
+        { 35.40,  0.57940  },
+        { 36.70,  0.59090  },
+        { 38.10,  0.60200  },
+        { 39.60,  0.61220  },
+        { 41.20,  0.62170  },
+        { 42.90,  0.63010  },
+        { 44.70,  0.63760  },
+        { 46.60,  0.64400  },
+        { 48.60,  0.64940  },
+        { 50.70,  0.65360  },
+        { 52.90,  0.65680  },
+        { 55.20,  0.65900  },
+        { 57.60,  0.66010  },
+        { 60.10,  0.66030  },
+        { 63.00,  0.65940  },
+        { 66.00,  0.65750  },
+        { 69.00,  0.65470  },
+        { 72.10,  0.65110  },
+        { 75.50,  0.64660  },
+        { 79.50,  0.64050  },
+        { 84.00,  0.63310  },
+        { 89.00,  0.62420  },
+        { 94.00,  0.61500  },
+        { 102.00, 0.59980  },
+        { 103.00, 0.59790  },
+        { 113.00, 0.57890  },
+        { 121.00, 0.56390  },
+        { 130.20, 0.54710  },
+        { 138.20, 0.53310  },
+        { 148.20, 0.51620  },
+        { 158.20, 0.50030  },
+        { 168.20, 0.48510  },
+        { 178.20, 0.47080  },
+        { 188.20, 0.45720  },
+        { 198.20, 0.44440  },
+        { 213.20, 0.42650  },
+        { 228.20, 0.40990  },
+        { 248.20, 0.38970  },
+        { 268.20, 0.37150  },
+        { 288.00, 0.35510  },
+        { 317.90, 0.33300  },
+        { 347.90, 0.31360  },
+        { 387.90, 0.29120  },
+        { 427.90, 0.27190  },
+        { 467.90, 0.25510  },
+        { 508.20, 0.24030  },
+        { 548.20, 0.22740  },
+        { 598.20, 0.21310  },
+        { 668.20, 0.19610  },
+        { 700.00, 0.18930  },
+        { 748.20, 0.17990  },
+        { 818.20, 0.16790  },
+        { 898.20, 0.15610  },
+        { 998.20, 0.14360  },
+        { 1100.00, 0.13290 },
+        { 1200.00, 0.12400 },
+        { 1300.00, 0.11620 },
+        { 1506.70, 0.10310 },
+        { 1662.70, 0.09510 },
+        { 1848.10, 0.08710 },
+        { 1998.10, 0.08170 },
+        { 2198.10, 0.07540 },
+        { 2448.10, 0.06890 },
+        { 2698.10, 0.06350 },
+        { 2998.10, 0.05810 },
+        { 3298.10, 0.05350 },
+        { 3648.10, 0.04910 },
+        { 3998.10, 0.04540 },
+            };
+
+    #define MAX_TBL (sizeof(tbl)/sizeof(tbl[0]))
+    #define MAX_EV 4000
+    static double new_tbl[MAX_EV];
+    static bool new_tbl_initialized;
+
+    // convert nist.gov table to new_tbl which is indexed by ev
+    if (!new_tbl_initialized) {
+        int32_t ev, i;
+        for (ev = 0; ev < MAX_EV; ev++) {
+            // if ev is not in range covered by table then 
+            // set new_ebl cross section entry to 0
+            if (ev < tbl[0].ev || ev > tbl[MAX_TBL-1].ev) {
+                new_tbl[ev] = 0;
+                continue;
+            }
+
+            // find location in the nist.gov tbl to interpolate
+            for (i = 0; i < MAX_TBL-1; i++) {
+                if (ev >= tbl[i].ev && ev <= tbl[i+1].ev) {
+                    break;
+                }
+            }
+            assert(i < MAX_TBL-1);
+
+            // determine cross section by interpolating from tbl
+            double slope = (tbl[i+1].cs - tbl[i].cs) / (tbl[i+1].ev - tbl[i].ev);
+            double cs = tbl[i].cs + slope * (ev - tbl[i].ev);    // 1e-16 cm^2
+
+            // store cross section in new_tbl, in units m^2
+            new_tbl[ev] = cs * 1e-20;  // m^2
+        }
+
+        // set initialized flag
+        new_tbl_initialized = true;
+    }
+
+    // return cross section, in m^2 via table lookup
+    // XXX go beyond MAX_EV
+    int32_t ev = incident_electron_energy_ev;
+    assert(ev >= 0);
+    if (ev >= MAX_EV) {
+        return 0;
+    }
+    return new_tbl[ev];
+}
+
+double atoms_per_cubic_meter(void)
+{
+    double P = MTORR_TO_PASCAL(15);
+    double V = IN3_TO_M3(1.333*M_PI*3*3*3);
+    double T = F_TO_K(70);
+    double n, N;
+
+    static bool first = true;
+
+    n = (P * V) / (R * T);
+    N = n * NA;
+
+    if (first) {
+        printf("apcm = %lg\n", N/V);
+        first = false;
+    }
+
+    return N / V;
+}

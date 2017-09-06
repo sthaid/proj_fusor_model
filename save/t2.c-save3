@@ -1,0 +1,232 @@
+// kinetic diameter;
+// https://en.wikipedia.org/wiki/Kinetic_diameter
+// 
+//   d^2 = 1 / (pi * l * n)
+//
+//     d = kinetic diameter
+//     l = mean free path
+//     n = number density of particles
+
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <unistd.h>
+
+#include <assert.h>
+#include <errno.h>
+#include <string.h>
+#include <math.h>
+#include <sys/queue.h>
+
+#include "util_misc.h"
+
+//
+// defines
+//
+
+#define NUM_SECTION               (10)
+#define NUM_SIM_PARTICLE          (1000000)
+#define CHAMBER_LENGTH            (10.0)         // m
+#define CHAMBER_CROSS_SECTION     (.001 * .001)  // m^2
+#define CHAMBER_VOLUME            (CHAMBER_LENGTH * CHAMBER_CROSS_SECTION)
+#define SECTION_VOLUME            (CHAMBER_VOLUME / NUM_SECTION)
+#define SECTION_LENGTH            (CHAMBER_LENGTH / NUM_SECTION)
+#define NUM_REAL_PARTICLE         (5e20 * CHAMBER_VOLUME)
+
+#define DELTA_T                   (1e-7)   // 1/10 microsecond
+
+//
+// typedefs
+//
+
+typedef struct {
+    struct {
+        double number_density;  // real particles per m^3
+        double temperature;     // kelvin
+    } section[NUM_SECTION];
+} state_t;
+
+typedef struct {
+    double x;
+    double temperature;
+} sim_particle_t;
+
+// 
+// variables
+//
+
+state_t        state;
+int32_t        num_sim_particle;
+sim_particle_t sim_particle[NUM_SIM_PARTICLE];
+
+//
+// prototypes
+//
+
+void test(void);
+void init_state_guess(void);
+void create_particles(void);
+void simulate_particles(void);
+void init_state_from_particles(void);
+void print_state(char * s);
+
+// -----------------  MAIN  ----------------------------------------------------------------------------
+
+int main(int argc, char **argv)
+{
+#if 1
+    double number_density, d, mean_free_path;
+    number_density = 4.92234e+20;  // ATOMS/CU_M   XXX should be molecules
+    d = 289e-12;   // meters
+                   // 289 pm (picometer)  (for H2 molecule)
+                   // a picometer is 1/1000 of a nanometer
+    mean_free_path = 1 / (M_PI * d * d * number_density);
+    printf("mean_free_path = %lf meters\n", mean_free_path);
+
+    #define D2_AMU 4.03
+    #define AMU_TO_KG(x)    ((x) * 1.66054e-27)
+    #define k  1.38066e-23    // Boltzmann constant J/K
+    #define TEMPERATURE_TO_VELOCITY(T) (sqrt(3 * k * (T) / AMU_TO_KG(D2_AMU)))
+    printf("VELOCITY AT 300Kelvin %lg m/s\n",
+        TEMPERATURE_TO_VELOCITY(300));
+
+    printf("max DeltaT = %lg  secs\n",
+        mean_free_path / TEMPERATURE_TO_VELOCITY(300) / 10);
+    
+    printf("\n");
+#endif
+
+    INFO("HELLO\n");
+    test();
+
+    return 0;
+}
+
+// -----------------  SIMULATION TEST  -----------------------------------------------------------------
+
+void test(void)
+{
+    // init state
+    init_state_guess();
+
+    while (true) {
+        // create representative particles for state
+        create_particles();
+
+        // simulate the representative particles for one time unit
+        // XXX simulate_particles();
+
+        // set state based on the reprsentative particles
+        init_state_from_particles();
+        exit(1);
+    }
+}
+
+void init_state_guess(void)
+{
+    int32_t i;
+    double section_number_density;
+
+    section_number_density = NUM_REAL_PARTICLE / CHAMBER_VOLUME;
+    for (i = 0; i < NUM_SECTION; i++) {
+        state.section[i].number_density = section_number_density;  // real particles per m^3
+        state.section[i].temperature    = 300;                     // kelvin
+    }
+
+    print_state("init_state_guess");
+}
+
+void create_particles(void)
+{
+    int32_t i, j, n;
+
+    // XXX clean up this routine
+
+    num_sim_particle = 0;
+    for (i = 0; i < NUM_SECTION; i++) {
+        double temperature = state.section[i].temperature;
+        n = state.section[i].number_density * SECTION_VOLUME *
+            (NUM_SIM_PARTICLE / NUM_REAL_PARTICLE);
+        for (j = 0; j < n; j++) {   
+            assert(num_sim_particle < NUM_SIM_PARTICLE);
+            sim_particle[num_sim_particle].x = i * SECTION_LENGTH + SECTION_LENGTH / 2;  // XXX tbd
+            sim_particle[num_sim_particle].temperature = temperature;
+            num_sim_particle++;
+        }
+    }
+
+    INFO("XXX num_sim_particle = %d\n\n", num_sim_particle);
+    assert(num_sim_particle <= NUM_SIM_PARTICLE);
+    assert(num_sim_particle > NUM_SIM_PARTICLE*0.99);   
+}
+
+#if 0
+void simulate_particles()
+{
+    for (i = 0; i < max_particles; i++) {
+        // update position
+
+        // if the particle is outside the chamber on the left then
+        //   set positive velocity based on temperature of left chamber wall
+        //   set poistion to 0
+        // endif
+
+        // if the particu is outside the chamber on the right then
+        //   set negative velocity based on temperature of right chamber wall
+        //   set poistion to the chamber length
+        // endif
+
+        // based on the probability of a collision with another particle determine
+        // whether a collision occurred; if so then update velocity using conservation
+        // of momentum and the velocity of the particle and the velocity of particles
+        // in this section
+
+}
+#endif
+
+void init_state_from_particles()
+{
+    int32_t i, sect_num;
+    int32_t sim_particle_count[NUM_SECTION];
+    double sim_particle_sum_temperature[NUM_SECTION];
+
+    memset(sim_particle_count, 0, sizeof(sim_particle_count));
+    memset(sim_particle_sum_temperature, 0, sizeof(sim_particle_sum_temperature));
+
+    // loop over all particles to determine the 
+    // - number of particles per section
+    // - average temperature of particles per section
+    for (i = 0; i < num_sim_particle; i++) {
+        sim_particle_t * sp = &sim_particle[i];
+        sect_num = sp->x / SECTION_LENGTH;
+        assert(sect_num >= 0 && sect_num < NUM_SECTION);
+        sim_particle_count[sect_num]++;
+        sim_particle_sum_temperature[sect_num] += sp->temperature;
+    }
+
+    // XXX comments
+    for (i = 0; i < NUM_SECTION; i++) {
+        state.section[i].number_density = sim_particle_count[i] * (NUM_REAL_PARTICLE /NUM_SIM_PARTICLE) / 
+                                          SECTION_VOLUME;
+        state.section[i].temperature    = sim_particle_sum_temperature[i] / sim_particle_count[i];
+    }
+
+    print_state("init_state_from_particles");
+        
+    // XXX may need to tweak number of particles per section to avoid rounding error
+}
+
+void print_state(char * s)
+{
+    int32_t i;
+
+    printf("%s\n", s);
+    for (i = 0; i < NUM_SECTION; i++) {
+        printf("%s: sect %d:  num_density=%lg  temp=%lf\n", 
+           __func__, i, state.section[i].number_density, state.section[i].temperature);
+    }
+    printf("\n");
+}

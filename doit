@@ -1,0 +1,12 @@
+#!/bin/bash
+
+make t2
+if [ $? -ne 0 ]; then
+  echo ERROR
+  exit
+fi
+
+./t2
+
+gprof -l -b t2 gmon.out
+
