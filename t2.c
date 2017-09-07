@@ -1,3 +1,4 @@
+            // https://en.wikipedia.org/wiki/Kinetic_diameter
 // kinetic diameter;
 // https://en.wikipedia.org/wiki/Kinetic_diameter
 // 
@@ -7,19 +8,26 @@
 //     l = mean free path
 //     n = number density of particles
 
-// XXX review
+
 // XXX make physics.h
-// XXX checkin
+// XXX combine state into one struct
 // XXX sdl graphics 
 // XXX record the simulation, and playback mode
 // XXX auto stop
 // XXX improve print_state
-// XXX combine state into one struct
+// XXX review
 
-
-// XXX time how long it takes
+// INPROGRESS
 // XXX optimize by minimizing floating point operations
+
+// MAYBE LATER
 // XXX multithread
+
+// DONE
+// XXX time how long it takes
+// XXX checkin
+
+// DONT DO THIS
 // XXX try float instead of double
 
 
@@ -62,8 +70,8 @@
 #define D2_AMU 4.03
 #define AMU_TO_KG(x)    ((x) * 1.66054e-27)
 #define k  1.38066e-23    // Boltzmann constant J/K
-#define TEMPERATURE_TO_VELOCITY(T) (sqrt(3 * k * (T) / AMU_TO_KG(D2_AMU)))
-#define VELOCITY_TO_TEMPERATURE(v) (AMU_TO_KG(D2_AMU) * (v) * (v) / (3. * k))
+#define TEMPERATURE_TO_VELOCITY(T) (sqrt((T) * (3. * k / AMU_TO_KG(D2_AMU))))
+#define VELOCITY_TO_TEMPERATURE(v) ((AMU_TO_KG(D2_AMU) / (3. * k)) * (v) * (v))
 
 //
 // typedefs
@@ -177,7 +185,6 @@ void init(void)
 void simulate(void)
 {
     int32_t i;
-    //int32_t coll_cnt;
     double t;
 
     static struct {
@@ -192,7 +199,6 @@ void simulate(void)
     #define MAX_T    0.000015
 
     for (t = 0; t < MAX_T; t += DELTA_T) {
-        //coll_cnt = 0;
         for (i = 0; i < num_sim_particle; i++) {
             sim_particle_t * sp = &sim_particle[i];
             sim_particle_t   sp_orig = *sp;
@@ -250,8 +256,6 @@ void simulate(void)
                 double temp_sum;
                 double sp_temperature = VELOCITY_TO_TEMPERATURE(sp->velocity);
 
-// XXX frequent
-// - need sp->temperature
                 temp_sum = state.section[orig_sect_num].num_sim_particle *
                            state.section[orig_sect_num].temperature;
                 state.section[orig_sect_num].temperature =
@@ -273,11 +277,7 @@ void simulate(void)
             // whether a collision occurred; if so then update velocity using conservation
             // of momentum and the velocity of the particle and the velocity of particles
             // in this section
-            // https://en.wikipedia.org/wiki/Kinetic_diameter
-// XXX frequent
-// - need optimized exp
-
-            stats.check_for_col++;
+#if 0
             double d, mean_free_path, average_num_events_per_sec, average_num_events_per_interval;
             double number_density, probability_of_0_collisions_in_interval;
             bool collision_occurred;
@@ -292,28 +292,31 @@ void simulate(void)
             probability_of_0_collisions_in_interval =   exp(-average_num_events_per_interval);
             collision_occurred = ((double)random()/RAND_MAX > probability_of_0_collisions_in_interval);
 
-#if 0
-            printf("sp[%d]: position=%lf velocity=%lf temp=%lf\n",
-                   i, sp->position, sp->velocity, VELOCITY_TO_TEMPERATURE(sp->velocity));
-            printf("  new_sect_num=%d  section_num_density=%lg\n",
-                   new_sect_num, number_density);
-            printf("  mfp=%lf  avg_col/sec=%lf  avg_col_per_intvl=%lf\n",
-                   mean_free_path, average_num_events_per_sec, average_num_events_per_interval);
-            printf("  probability_of_0_col_in_intvl = %lf\n",
-                   probability_of_0_collisions_in_interval);
+            // printf("sp[%d]: position=%lf velocity=%lf temp=%lf\n",
+            //        i, sp->position, sp->velocity, VELOCITY_TO_TEMPERATURE(sp->velocity));
+            // printf("  new_sect_num=%d  section_num_density=%lg\n",
+            //        new_sect_num, number_density);
+            // printf("  mfp=%lf  avg_col/sec=%lf  avg_col_per_intvl=%lf\n",
+            //        mean_free_path, average_num_events_per_sec, average_num_events_per_interval);
+            // printf("  probability_of_0_col_in_intvl = %lf\n",
+            //        probability_of_0_collisions_in_interval);
+#else
+            double average_num_events_per_interval, probability_of_0_collisions_in_interval;
+            bool collision_occurred;
+            stats.check_for_col++;
+            average_num_events_per_interval =  
+                fabs(sp->velocity) * 
+                state.section[new_sect_num].num_sim_particle *     
+                ((NUM_REAL_PARTICLE / NUM_SIM_PARTICLE) / SECTION_VOLUME * (M_PI * 289e-12 * 289e-12 * DELTA_T));
+            probability_of_0_collisions_in_interval =   exp(-average_num_events_per_interval);
+            collision_occurred = ((double)random()/RAND_MAX > probability_of_0_collisions_in_interval);
 #endif
             if (collision_occurred) {
                 stats.got_col++;
-#if 0
-                coll_cnt++;
-                printf("*** COLLISION i=%d coll_cnt=%d fract=%lf ***\n",
-                       i, coll_cnt, (double)coll_cnt / (i+1));
-#endif
+
                 // assume particles are moving towards each other, and
                 // they exchange velocities due to conservation of momentum
                 double vs;
-// XXX frequent
-// need section velocity
                 vs = TEMPERATURE_TO_VELOCITY(state.section[new_sect_num].temperature);
                 if (sp->velocity > 0) {
                     sp->velocity = -vs;
