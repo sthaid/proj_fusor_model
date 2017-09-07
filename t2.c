@@ -1,14 +1,3 @@
-            // https://en.wikipedia.org/wiki/Kinetic_diameter
-// kinetic diameter;
-// https://en.wikipedia.org/wiki/Kinetic_diameter
-// 
-//   d^2 = 1 / (pi * l * n)
-//
-//     d = kinetic diameter
-//     l = mean free path
-//     n = number density of particles
-
-
 // XXX make physics.h
 // XXX combine state into one struct
 // XXX sdl graphics 
@@ -44,6 +33,8 @@
 #include <math.h>
 #include <sys/queue.h>
 
+#include "physics.h"
+
 #include "util_misc.h"
 
 //
@@ -57,7 +48,7 @@
 #define CHAMBER_VOLUME            (CHAMBER_LENGTH * CHAMBER_CROSS_SECTION)
 #define SECTION_VOLUME            (CHAMBER_VOLUME / NUM_SECTION)
 #define SECTION_LENGTH            (CHAMBER_LENGTH / NUM_SECTION)
-#define NUM_REAL_PARTICLE         (5e20 * CHAMBER_VOLUME)   // XXX 5e20?
+#define NUM_REAL_PARTICLE         (NUMBER_DENSITY_OF_MOLECULES(MTORR_TO_PASCAL(15),300) * CHAMBER_VOLUME)  // XXX 5e20?
 
 #define SECT_NUM(sp)              ((sp)->position / SECTION_LENGTH)
 
@@ -66,12 +57,6 @@
 #define GUESS_TEMP                300
 
 #define SECTION_POSITION(num)        ((num) * SECTION_LENGTH)
-
-#define D2_AMU 4.03
-#define AMU_TO_KG(x)    ((x) * 1.66054e-27)
-#define k  1.38066e-23    // Boltzmann constant J/K
-#define TEMPERATURE_TO_VELOCITY(T) (sqrt((T) * (3. * k / AMU_TO_KG(D2_AMU))))
-#define VELOCITY_TO_TEMPERATURE(v) ((AMU_TO_KG(D2_AMU) / (3. * k)) * (v) * (v))
 
 //
 // typedefs
@@ -110,6 +95,14 @@ void print_state(double t);
 
 int main(int argc, char **argv)
 {
+    double vv = TEMPERATURE_TO_VELOCITY(300,D2_KG);
+    double tt = VELOCITY_TO_TEMPERATURE(vv,D2_KG);
+    printf("%lf\n", tt);
+
+    double num_den;
+    num_den = NUMBER_DENSITY_OF_MOLECULES(MTORR_TO_PASCAL(15), 300);
+    printf("num_den = %lg\n", num_den);
+    
 #if 1
     double number_density, d, mean_free_path;
     number_density = 4.92234e+20;  // NUM_D2_MOLECULES/CU_M
@@ -120,10 +113,10 @@ int main(int argc, char **argv)
     printf("mean_free_path = %lf meters\n", mean_free_path);
 
     printf("VELOCITY AT %d Kelvin %lg m/s\n",
-        GUESS_TEMP, TEMPERATURE_TO_VELOCITY(GUESS_TEMP));
+        GUESS_TEMP, TEMPERATURE_TO_VELOCITY(GUESS_TEMP,D2_KG));
 
     printf("max DeltaT = %lg  secs\n",
-        mean_free_path / TEMPERATURE_TO_VELOCITY(GUESS_TEMP) / 10);
+        mean_free_path / TEMPERATURE_TO_VELOCITY(GUESS_TEMP,D2_KG) / 10);
     
     printf("\n");
 #endif
@@ -165,7 +158,7 @@ void init(void)
         double velocity, spacing, position;
         int32_t j;
 
-        velocity = TEMPERATURE_TO_VELOCITY(state.section[i].temperature);
+        velocity = TEMPERATURE_TO_VELOCITY(state.section[i].temperature,D2_KG);
         spacing = SECTION_LENGTH / num_sim_particle_in_section;
         position = SECTION_POSITION(i) + spacing / 2;
         for (j = 0; j < num_sim_particle_in_section; j++) {   
@@ -195,7 +188,7 @@ void simulate(void)
         int64_t got_col;
     } stats;
 
-    #define DELTA_T  1e-6
+    #define DELTA_T  1e-6  // XXX runtime assert that this is small enough
     #define MAX_T    0.000015
 
     for (t = 0; t < MAX_T; t += DELTA_T) {
@@ -217,9 +210,9 @@ void simulate(void)
             if (sp->position < 0) {
                 stats.off_left++;
                 double temp_sum, sp_delta_temp;
-                sp_delta_temp = CHAMBER_LEFT_END_TEMP - VELOCITY_TO_TEMPERATURE(sp->velocity);
+                sp_delta_temp = CHAMBER_LEFT_END_TEMP - VELOCITY_TO_TEMPERATURE(sp->velocity,D2_KG);
                 sp->position = 0;
-                sp->velocity = TEMPERATURE_TO_VELOCITY(CHAMBER_LEFT_END_TEMP);
+                sp->velocity = TEMPERATURE_TO_VELOCITY(CHAMBER_LEFT_END_TEMP,D2_KG);
                 temp_sum = state.section[orig_sect_num].num_sim_particle *
                            state.section[orig_sect_num].temperature;
                 state.section[orig_sect_num].temperature =
@@ -235,9 +228,9 @@ void simulate(void)
             if (sp->position >= CHAMBER_LENGTH) {
                 stats.off_right++;
                 double temp_sum, sp_delta_temp;
-                sp_delta_temp = CHAMBER_RIGHT_END_TEMP - VELOCITY_TO_TEMPERATURE(sp->velocity);
+                sp_delta_temp = CHAMBER_RIGHT_END_TEMP - VELOCITY_TO_TEMPERATURE(sp->velocity,D2_KG);
                 sp->position = CHAMBER_LENGTH - 1e-9;
-                sp->velocity = -TEMPERATURE_TO_VELOCITY(CHAMBER_RIGHT_END_TEMP);
+                sp->velocity = -TEMPERATURE_TO_VELOCITY(CHAMBER_RIGHT_END_TEMP,D2_KG);
                 temp_sum = state.section[orig_sect_num].num_sim_particle *
                            state.section[orig_sect_num].temperature;
                 state.section[orig_sect_num].temperature =
@@ -254,7 +247,7 @@ void simulate(void)
             if (new_sect_num != orig_sect_num) {
                 stats.switch_sects++;
                 double temp_sum;
-                double sp_temperature = VELOCITY_TO_TEMPERATURE(sp->velocity);
+                double sp_temperature = VELOCITY_TO_TEMPERATURE(sp->velocity,D2_KG);
 
                 temp_sum = state.section[orig_sect_num].num_sim_particle *
                            state.section[orig_sect_num].temperature;
@@ -293,7 +286,7 @@ void simulate(void)
             collision_occurred = ((double)random()/RAND_MAX > probability_of_0_collisions_in_interval);
 
             // printf("sp[%d]: position=%lf velocity=%lf temp=%lf\n",
-            //        i, sp->position, sp->velocity, VELOCITY_TO_TEMPERATURE(sp->velocity));
+            //        i, sp->position, sp->velocity, VELOCITY_TO_TEMPERATURE(sp->velocity,D2_KG));
             // printf("  new_sect_num=%d  section_num_density=%lg\n",
             //        new_sect_num, number_density);
             // printf("  mfp=%lf  avg_col/sec=%lf  avg_col_per_intvl=%lf\n",
@@ -301,6 +294,7 @@ void simulate(void)
             // printf("  probability_of_0_col_in_intvl = %lf\n",
             //        probability_of_0_collisions_in_interval);
 #else
+            // XXX NUM_SIM_PARTICLE
             double average_num_events_per_interval, probability_of_0_collisions_in_interval;
             bool collision_occurred;
             stats.check_for_col++;
@@ -317,7 +311,7 @@ void simulate(void)
                 // assume particles are moving towards each other, and
                 // they exchange velocities due to conservation of momentum
                 double vs;
-                vs = TEMPERATURE_TO_VELOCITY(state.section[new_sect_num].temperature);
+                vs = TEMPERATURE_TO_VELOCITY(state.section[new_sect_num].temperature,D2_KG);
                 if (sp->velocity > 0) {
                     sp->velocity = -vs;
                 } else {
