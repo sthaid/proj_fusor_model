@@ -1,0 +1,56 @@
+DATA
+- array of particles
+- particles indexed by cu mm location, needs a list or an array at each location
+
+INTERACTIONS
+- ionization
+- recombination
+- collision
+- movement
+  . if goes outside chamber then reset speed to ambient temperature, and
+    reset direction to within chamber, and reset position to within chamber
+
+PARAMETERS
+- chamber radius   
+- grid radius
+- grid voltage
+- grid current
+- pressure, can this be changed dynamically
+- delta_t  (warn if becomes too big to process collisions)
+
+CONSTANTS
+- number of particles in the simulation
+- location box size  (cu mm)
+
+GRAPHS - X AXIS IS RADIUS
+- number density of D and D ions
+- temperature
+- ionization and recombination rate
+
+CHAMBER VIEW
+- cross section xl to xh, yl to yh, z-deltaz/2 to z+deltaz/2
+- ability to set deltaz, and to zoom in and out on an x,y
+
+PROGRAMMING
+- use integer math
+  . x,y,z:  nanometers
+  . velocity:  nanometers/sec
+  . time:  nanoseconds
+- use all available cores for particle sim
+- main thread is for sdl display and control
+- files
+  . common.h
+  . main.c
+  . ionization.c
+  . particles.c
+  . readme
+- locking
+  . each thread will grab a location to process all particles at that
+    location, and while doing that will own the mutex for that location
+  . if a particle has moved into a location it will have already have been
+    processed for this T, and thus will not be reporcessed
+  . when moving a particle to a new location, will need to acquire the lock
+    for that location
+
+ASSUMPTIONS
+- only D, no D2
