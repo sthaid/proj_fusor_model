@@ -1,5 +1,6 @@
 *.o
 *.d
+*.swp
 t1
 t2
 gmon.out
