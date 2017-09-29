@@ -1,6 +1,7 @@
 DATA
 - array of particles
 - particles indexed by cu mm location, needs a list or an array at each location
+- radial stats
 
 INTERACTIONS
 - ionization
