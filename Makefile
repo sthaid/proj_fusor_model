@@ -1,18 +1,21 @@
-TARGETS = t1 t2 
+TARGETS = model
+
+# XXX -Wno-unused-variable
 
 CC = gcc
 OUTPUT_OPTION=-MMD -MP -o $@
-CFLAGS = -c -g -O2 -pthread -fsigned-char -Wall \
-         $(shell sdl2-config --cflags) 
+CFLAGS = -g -O2 -pthread -mcmodel=medium -Wall -Wno-unused-variable $(shell sdl2-config --cflags) 
 
-SRC_T1 = t1.c 
-OBJ_T1=$(SRC_T1:.c=.o)
+SRC_MODEL = main.c \
+            model.c \
+            util_sdl.c \
+            util_jpeg.c \
+            util_png.c \
+            util_sdl_predefined_displays.c \
+            util_misc.c
+OBJ_MODEL=$(SRC_MODEL:.c=.o)
 
-SRC_T2 = t2.c \
-         util_misc.c
-OBJ_T2=$(SRC_T2:.c=.o)
-
-DEP=$(SRC_T2:.c=.d) $(SRC_T1:.c=.d)
+DEP=$(SRC_MODEL:.c=.d)
 
 #
 # build rules
@@ -20,12 +23,9 @@ DEP=$(SRC_T2:.c=.d) $(SRC_T1:.c=.d)
 
 all: $(TARGETS)
 
-t1: $(OBJ_T1) 
-	$(CC) -o $@ $(OBJ_T1)
-
-# XXX pg
-t2: $(OBJ_T2) 
-	$(CC) -pg -lm -o $@ $(OBJ_T2)
+model: $(OBJ_MODEL) 
+	$(CC) -pthread -lrt -lm -lpng -ljpeg -lSDL2 -lSDL2_ttf -lSDL2_mixer \
+              -o $@ $(OBJ_MODEL)
 
 -include $(DEP)
 
@@ -34,5 +34,5 @@ t2: $(OBJ_T2)
 #
 
 clean:
-	rm -f $(TARGETS) $(OBJ_T1) $(OBJ_T2) $(DEP)
+	rm -f $(TARGETS) $(OBJ_MODEL) $(DEP)
 
