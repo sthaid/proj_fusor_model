@@ -55,3 +55,103 @@ PROGRAMMING
 
 ASSUMPTIONS
 - only D, no D2
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+
+
+
+
+#if 0 // LATER
+#define FILE_HDR_MAGIC    1234567
+#define FILE_HDR_VERSION  1
+
+typedef struct {
+    int64_t magic;
+    int64_t version;
+    int64_t reserved[6];
+} file_hdr_t;
+
+int32_t model_init_from_file()
+{
+    int32_t fd = -1;
+    int32_t ret = -1;
+    bool was_running;
+
+    // stop the model
+    was_running = model_stop();
+
+    // open the file
+    fd = open(xxx, O_RDONLY);
+    if (fd == -1) {
+        ERROR
+        goto err;
+
+    // read file header and verify
+    ret = read(fd, &hdr, sizeof(hdr));
+    if (ret != sizeof(hdr)) {
+        ERROR
+        goto err;
+    }
+
+    // read ....................
+
+    // success
+    ret = 0;
+    goto cleanup;
+
+    // error 
+err:
+    ret = -1;
+    goto cleanup;
+
+    // cleanup and return
+cleanup:
+    if (fd != -1) {
+        close(fd);
+    }
+    if (was_running) {
+        model_start();
+    }
+    return ret;
+}
+
+int32_t model_write_file(void)
+{
+    bool was_running;
+
+    // stop the model
+    was_running = model_stop();
+
+    // write the file
+
+    // if the model was running then start the model
+    if (was_running) {
+        model_start();
+    }
+}
+
+
+int32_t model_terminate()
+{
+    // stop the model
+
+    // XXX what else?
+}
+
+
+model_change_param(enum param_select, int64_t param_value)
+{
+    // if the model is running then stop the model
+
+    // change the param
+    switch (param_select) {
+    case PARM_VOLTAGE:
+        param.voltage = param_value;
+        break;
+    ...
+    }
+
+    // if the model was running then start the model
+}
+#endif
