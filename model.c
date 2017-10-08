@@ -23,18 +23,30 @@
 // defines
 //
 
-// XXX review this section
-#define LOCBOX_SIZE_NM                (1000000L * LOCBOX_SIZE_MM)
+// model time increment
 #define DELTA_T_NS  1L
 
+// for use in call to madvise
 #define PAGE_SIZE 4096L
 #define ROUND_UP(x,n) (((uint64_t)(x) + ((uint64_t)(n) - 1)) & ~((uint64_t)(n) - 1))
 
-#define INCHES_PER_METER  39.3701
+// locbox size in nanometers
+#define LOCBOX_SIZE_NM  (LOCBOX_SIZE_MM * 1000000L)
 
-#define D2_AMU 4.03                // Deuterium molecule mass
-#define D2_KG  AMU_TO_KG(D2_AMU)
+// conversion functions
+#define METERS_TO_INCHES(m)     ((m) * 39.3701)
 #define AMU_TO_KG(amu)          ((amu) * 1.66054e-27)
+#define MTORR_TO_PASCAL(mtorr)  ((mtorr) * 0.13332237)
+#define UTORR_TO_PASCAL(utorr)  ((utorr) * 0.00013332237)
+#define F_TO_C(t)               (((t) - 32.0) * (5.0 / 9.0))
+#define F_TO_K(t)               (F_TO_C(t) + 273.15)
+
+// room temperature
+#define ROOM_TEMPERATURE_KELVIN (F_TO_K(70.0))
+
+// deuterium 
+#define D2_AMU 4.03
+#define D2_KG  AMU_TO_KG(D2_AMU)
 
 // kinetic temperature
 // reference: http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/kintem.html
@@ -42,6 +54,10 @@
 #define TEMPERATURE_TO_VELOCITY(t,m) (sqrt((t) * (3. * k / (m))))
 #define VELOCITY_TO_TEMPERATURE(v,m) (((m) / (3. * k)) * (v) * (v))
 
+// ideal gas law
+// http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/idegas.html
+#define NUMBER_OF_MOLECULES(p,v,t)        ((p) * (v) / (k * (t)))
+#define NUMBER_DENSITY_OF_MOLECULES(p,t)  ((p) / (k * (t)))
 
 // 
 // typedefs
@@ -106,6 +122,7 @@ void model_init_from_params(char * params_str)
     int32_t x_idx, y_idx, z_idx;
     int32_t x_nm, y_nm, z_nm, r_nm;
     int32_t max_worker_threads;
+    int64_t num_real_particles_in_locbox;
     pthread_t thread_id;
 
     // don't dump the particles and locbox arrays, because they are so large
@@ -161,10 +178,10 @@ void model_init_from_params(char * params_str)
 
     DEBUG("params.chamber_radius_nm      = %d (%f inches)\n", 
           params.chamber_radius_nm,
-          params.chamber_radius_nm / 1e9 * INCHES_PER_METER);
+          METERS_TO_INCHES(params.chamber_radius_nm / 1e9));
     DEBUG("params.grid_radius_nm         = %d (%f inches)\n", 
           params.grid_radius_nm,
-          params.grid_radius_nm / 1e9 * INCHES_PER_METER);
+          METERS_TO_INCHES(params.grid_radius_nm / 1e9));
     DEBUG("params.chamber_pressure_utorr = %d\n", params.chamber_pressure_utorr);
     DEBUG("params.grid_voltage_v         = %d\n", params.grid_voltage_v);
     DEBUG("params.grid_current_ua        = %d\n", params.grid_current_ua);
@@ -226,6 +243,20 @@ void model_init_from_params(char * params_str)
     }
     DEBUG("done initializing particles\n");
 
+    // determine num_real_particles_per_virtual_particle 
+    // using the ideal gas law
+    num_real_particles_in_locbox = 
+        NUMBER_OF_MOLECULES(UTORR_TO_PASCAL(params.chamber_pressure_utorr),
+                            LOCBOX_VOLUME_CU_MM/1000000000.0,
+                            ROOM_TEMPERATURE_KELVIN);
+    num_real_particles_per_virtual_particle = num_real_particles_in_locbox / AVERAGE_PARTICLES_PER_LOCBOX;
+    DEBUG("ROOM_TEMPERATURE_KELVIN                 = %lf\n", ROOM_TEMPERATURE_KELVIN);
+    DEBUG("num_real_particles_in_locbox            = %ld\n", num_real_particles_in_locbox);
+    DEBUG("num_real_particles_per_virtual_particle = %ld\n", num_real_particles_per_virtual_particle);
+
+    // init time_ns
+    time_ns = 0;
+
     // create threads
     max_worker_threads = sysconf(_SC_NPROCESSORS_ONLN);
     DEBUG("creating control_thread and %d worker_threads ...\n", max_worker_threads);
@@ -235,21 +266,6 @@ void model_init_from_params(char * params_str)
         pthread_create(&thread_id, NULL, work_thread, (void*)(intptr_t)i);
     }
     DEBUG("done creating threads\n");
-
-    // init time_ns
-    time_ns = 0;
-
-    // XXX
-    // determine num_real_particles_per_virtual_particle based
-    // on the pressure param
-    // 
-    // num_real_particles_in_locbox = P V / (R T)
-    // num_real_particles_per_virtual_particle = num_real_particles_in_locbox / 
-    //                                           VIRT_PARTICLES_IN_LOCBOX
-    //   where
-    //     P is pressure param
-    //     V is volume of a locbox element
-    //     T is room temperature
 }
 
 void init_particle(particle_t * p)
@@ -261,9 +277,10 @@ void init_particle(particle_t * p)
     static int64_t velocity_nmperdt, velocity_mpers;
 
     // initialize velocity_nmperdt, if not already initialized;
-    // all particles will be given this velocity which is equivalent to 300 degrees kelvin
+    // all particles will be given this velocity,
+    // which is equivalent to ROOM_TEMPERATURE_KELVIN
     if (velocity_nmperdt == 0) {
-        velocity_mpers = TEMPERATURE_TO_VELOCITY(300,AMU_TO_KG(D2_AMU));
+        velocity_mpers = TEMPERATURE_TO_VELOCITY(ROOM_TEMPERATURE_KELVIN, D2_KG);
         velocity_nmperdt = velocity_mpers * DELTA_T_NS;
         DEBUG("velocity_mpers    = %ld\n", velocity_mpers);
         DEBUG("velocity_nmperdt  = %ld\n", velocity_nmperdt);
