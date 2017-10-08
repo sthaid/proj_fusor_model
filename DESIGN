@@ -57,12 +57,10 @@ ASSUMPTIONS
 - only D, no D2
 
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx  LATER  xxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 
-
-
-
-#if 0 // LATER
 #define FILE_HDR_MAGIC    1234567
 #define FILE_HDR_VERSION  1
 
@@ -155,3 +153,218 @@ model_change_param(enum param_select, int64_t param_value)
     // if the model was running then start the model
 }
 #endif
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxx  INTEGER QUARE ROOT  xxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+http://www.codecodex.com/wiki/Calculate_an_integer_square_root
+http://www.codecodex.com/wiki/Calculate_an_integer_square_root
+   ^^^^ TRY THESE
+
+
+------------------------
+
+https://www.akalin.com/computing-isqrt
+
+// isqrt returns the greatest number x such that x^2 <= n. The type of
+// n must behave like BigInteger (e.g.,
+// https://github.com/jasondavies/jsbn ), and n must be non-negative.
+//
+//
+// Example (open up the JS console on this page and type):
+//
+//   isqrt(new BigInteger("64")).toString()
+function isqrt(n) {
+  var s = n.signum();
+  if (s < 0) {
+    throw new Error('negative radicand');
+  }
+  if (s == 0) {
+    return n;
+  }
+
+  // x = 2^ceil(Bits(n)/2)
+  var x = n.constructor.ONE.shiftLeft(Math.ceil(n.bitLength()/2));
+  while (true) {
+    // y = floor((x + floor(n/x))/2)
+    var y = x.add(n.divide(x)).shiftRight(1);
+    if (y.compareTo(x) >= 0) {
+      return x;
+    }
+    x = y;
+  }
+}
+
+https://stackoverflow.com/questions/53161/find-the-highest-order-bit-in-c
+int highest_order_bit(int x)
+{
+    static const int msb_lut[256] =
+        {
+            0, 0, 1, 1, 2, 2, 2, 2, // 0000_0000 - 0000_0111
+            3, 3, 3, 3, 3, 3, 3, 3, // 0000_1000 - 0000_1111
+            4, 4, 4, 4, 4, 4, 4, 4, // 0001_0000 - 0001_0111
+            4, 4, 4, 4, 4, 4, 4, 4, // 0001_1000 - 0001_1111
+            5, 5, 5, 5, 5, 5, 5, 5, // 0010_0000 - 0010_0111
+            5, 5, 5, 5, 5, 5, 5, 5, // 0010_1000 - 0010_1111
+            5, 5, 5, 5, 5, 5, 5, 5, // 0011_0000 - 0011_0111
+            5, 5, 5, 5, 5, 5, 5, 5, // 0011_1000 - 0011_1111
+
+            6, 6, 6, 6, 6, 6, 6, 6, // 0100_0000 - 0100_0111
+            6, 6, 6, 6, 6, 6, 6, 6, // 0100_1000 - 0100_1111
+            6, 6, 6, 6, 6, 6, 6, 6, // 0101_0000 - 0101_0111
+            6, 6, 6, 6, 6, 6, 6, 6, // 0101_1000 - 0101_1111
+            6, 6, 6, 6, 6, 6, 6, 6, // 0110_0000 - 0110_0111
+            6, 6, 6, 6, 6, 6, 6, 6, // 0110_1000 - 0110_1111
+            6, 6, 6, 6, 6, 6, 6, 6, // 0111_0000 - 0111_0111
+            6, 6, 6, 6, 6, 6, 6, 6, // 0111_1000 - 0111_1111
+
+            7, 7, 7, 7, 7, 7, 7, 7, // 1000_0000 - 1000_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1000_1000 - 1000_1111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1001_0000 - 1001_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1001_1000 - 1001_1111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1010_0000 - 1010_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1010_1000 - 1010_1111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1011_0000 - 1011_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1011_1000 - 1011_1111
+
+            7, 7, 7, 7, 7, 7, 7, 7, // 1100_0000 - 1100_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1100_1000 - 1100_1111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1101_0000 - 1101_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1101_1000 - 1101_1111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1110_0000 - 1110_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1110_1000 - 1110_1111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1111_0000 - 1111_0111
+            7, 7, 7, 7, 7, 7, 7, 7, // 1111_1000 - 1111_1111
+        };
+
+    int byte;
+    int byte_cnt;
+
+    for (byte_cnt = 3; byte_cnt >= 0; byte_cnt--)
+    {
+        byte = (x >> (byte_cnt * 8)) & 0xff;
+        if (byte != 0)
+        {
+            return msb_lut[byte] + (byte_cnt * 8);
+        }
+    }
+
+    return -1;
+}
+
+
+λx.letrec sqrt(x) = 
+  if x = 0 then 0
+  else let r2 := sqrt (x - 1) in
+       let r3 := r2 + 1 in
+         if (x) < (r3 * r3) then r2
+         else r3 in
+  sqrt(x)
+
+
+
+function integerSqrt(n):
+    if n < 0:
+        error "integerSqrt works for only nonnegative inputs"
+    else if n < 2:
+        return n
+    else:
+        # Recursive call:
+        smallCandidate = integerSqrt(n >> 2) << 1
+        largeCandidate = smallCandidate + 1
+        if largeCandidate*largeCandidate > n:
+            return smallCandidate
+        else:
+            return largeCandidate
+
+
+
+uint32_t gapsqrt64(uint64_t a) {
+        uint64_t rem = 0, root = 0;
+
+        for (int i = 64 / 2; i > 0; i--) {
+                root <<= 1;
+                rem = (rem << 2) | (a >> (64 - 2));
+                a <<= 2;
+                if (root < rem) {
+                        rem -= root | 1;
+                        root += 2;
+                }
+        }
+        return root >> 1;
+}
+
+
+
+/* Integer square root by Halleck's method, with Legalize's speedup */
+long isqrt (x) long x;{
+  long   squaredbit, remainder, root;
+
+   if (x<1) return 0;
+  
+   /* Load the binary constant 01 00 00 ... 00, where the number
+    * of zero bits to the right of the single one bit
+    * is even, and the one bit is as far left as is consistant
+    * with that condition.)
+    */
+   squaredbit  = (long) ((((unsigned long) ~0L) >> 1) & 
+                        ~(((unsigned long) ~0L) >> 2));
+   /* This portable load replaces the loop that used to be 
+    * here, and was donated by  legalize@xmission.com 
+    */
+
+   /* Form bits of the answer. */
+   remainder = x;  root = 0;
+   while (squaredbit > 0) {
+     if (remainder >= (squaredbit | root)) {
+         remainder -= (squaredbit | root);
+         root >>= 1; root |= squaredbit;
+     } else {
+         root >>= 1;
+     }
+     squaredbit >>= 2; 
+   }
+
+   return root;
+}
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxx  RANDOM NUMBER TEST  xxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+inline int32_t random_range(int32_t min, int32_t max)
+{
+    int64_t extent = (int64_t)max - min + 1L;
+    return random() * extent / (RAND_MAX+1L) + min;
+}
+
+int main(int argc, char **argv)
+{
+    int32_t min, max;
+
+    printf("%d %d\n", 0x80000000, 0x7fffffff);
+
+    if (argc != 3) {
+        printf("min and max expected\n");
+        exit(1);
+    }
+    if (sscanf(argv[1], "%d", &min) != 1) {
+        printf("min invalid\n");
+        exit(1);
+    }
+    if (sscanf(argv[2], "%d", &max) != 1) {
+        printf("max invalid\n");
+        exit(1);
+    }
+
+    printf("min=%d max=%d\n", min, max);
+    while (1) {
+        printf("%d\n", random_range(min,max));
+    }
+}
