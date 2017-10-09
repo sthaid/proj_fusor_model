@@ -56,7 +56,6 @@ typedef struct {
 
 typedef struct particle_s {
     LIST_ENTRY(particle_s) entries;
-    struct locbox_s * lb;
     int64_t last_processed_time_ns;
     int32_t x_nm;
     int32_t y_nm;
@@ -72,6 +71,7 @@ typedef struct locbox_s {
     LIST_HEAD(head_s, particle_s) particle_list_head;
     pthread_spinlock_t particle_list_spinlock;
     int32_t radius_idx;
+    int32_t r_nm;
 } locbox_t;
 
 typedef struct {

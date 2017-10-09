@@ -1,3 +1,15 @@
+TODO
+- threads in model.c
+- test creating random ions and accelerate them towards the grid
+- sdl init
+- sdl display layout
+- sdl chamber
+- sdl graphs
+
+DONE
+
+-----------------------
+
 DATA
 - array of particles
 - particles indexed by cu mm location, needs a list or an array at each location

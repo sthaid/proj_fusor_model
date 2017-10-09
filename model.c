@@ -18,6 +18,7 @@
 // XXX todo
 // - profiling
 // - review all places fpu is used,such as sqrt etc.
+// - shuffle the locbox_list to prevent lock contention
 
 //
 // defines
@@ -25,6 +26,10 @@
 
 // model time increment
 #define DELTA_T_NS  1L
+
+// show the value of a define
+#define SHOW_DEFINE(x) INFO("define %s = %s\n", #x, SHOW_DEFINE_STR(x))
+#define SHOW_DEFINE_STR(x) #x
 
 // for use in call to madvise
 #define PAGE_SIZE 4096L
@@ -75,6 +80,9 @@ static bool              run_request;
 static bool              running;
 
 static pthread_barrier_t barrier;
+
+static int32_t           roomtemp_velocity_nmperdt;
+static int32_t           roomtemp_velocity_mpers;
  
 //
 // prototypes
@@ -120,7 +128,7 @@ void model_init_from_params(char * params_str)
     int32_t ret, cnt, i;
     double chamber_diameter_mm, grid_diameter_mm, chamber_pressure_mtorr, grid_voltage_kv, grid_current_ma;
     int32_t x_idx, y_idx, z_idx;
-    int32_t x_nm, y_nm, z_nm, r_nm;
+    int32_t x_nm, y_nm, z_nm;
     int32_t max_worker_threads;
     int64_t num_real_particles_in_locbox;
     pthread_t thread_id;
@@ -186,6 +194,13 @@ void model_init_from_params(char * params_str)
     DEBUG("params.grid_voltage_v         = %d\n", params.grid_voltage_v);
     DEBUG("params.grid_current_ua        = %d\n", params.grid_current_ua);
 
+    // initialize roomtemp_velocity_mpers and roomtemp_velocity_nmperdt
+    roomtemp_velocity_mpers = TEMPERATURE_TO_VELOCITY(ROOM_TEMPERATURE_KELVIN, D2_KG);
+    roomtemp_velocity_nmperdt = roomtemp_velocity_mpers * DELTA_T_NS;
+    DEBUG("ROOM_TEMPERATURE_KELVIN    = %lf\n", ROOM_TEMPERATURE_KELVIN);
+    DEBUG("roomtemp_velocity_mpers    = %d\n", roomtemp_velocity_mpers);
+    DEBUG("roomtemp_velocity_nmperdt  = %d\n", roomtemp_velocity_nmperdt);
+
     // init max_radius
     max_radius = params.chamber_radius_nm / 1000000L / RADIUS_SHELL_SIZE_MM;
     DEBUG("max_radius      = %d\n", max_radius);
@@ -202,8 +217,8 @@ void model_init_from_params(char * params_str)
                 x_nm = x_idx * LOCBOX_SIZE_NM - (MAX_LOCBOX*LOCBOX_SIZE_NM/2) + LOCBOX_SIZE_NM/2;
                 y_nm = y_idx * LOCBOX_SIZE_NM - (MAX_LOCBOX*LOCBOX_SIZE_NM/2) + LOCBOX_SIZE_NM/2;
                 z_nm = z_idx * LOCBOX_SIZE_NM - (MAX_LOCBOX*LOCBOX_SIZE_NM/2) + LOCBOX_SIZE_NM/2;
-                r_nm = hypotenuse(x_nm, y_nm, z_nm);
-                lb->radius_idx = r_nm / (RADIUS_SHELL_SIZE_MM * 1000000L);
+                lb->r_nm = hypotenuse(x_nm, y_nm, z_nm);
+                lb->radius_idx = lb->r_nm / (RADIUS_SHELL_SIZE_MM * 1000000L);
                 if (lb->radius_idx >= MAX_RADIUS) {
                     FATAL("radius_idx %d too big MAX_RADIUS = %ld\n", lb->radius_idx, MAX_RADIUS);
                 }
@@ -211,7 +226,7 @@ void model_init_from_params(char * params_str)
         }
     }
 
-    // init locbox_list  XXX shuffle 
+    // init locbox_list  
     for (x_idx = 0; x_idx < MAX_LOCBOX; x_idx++) {
         for (y_idx = 0; y_idx < MAX_LOCBOX; y_idx++) {
             for (z_idx = 0; z_idx < MAX_LOCBOX; z_idx++) {
@@ -250,7 +265,6 @@ void model_init_from_params(char * params_str)
                             LOCBOX_VOLUME_CU_MM/1000000000.0,
                             ROOM_TEMPERATURE_KELVIN);
     num_real_particles_per_virtual_particle = num_real_particles_in_locbox / AVERAGE_PARTICLES_PER_LOCBOX;
-    DEBUG("ROOM_TEMPERATURE_KELVIN                 = %lf\n", ROOM_TEMPERATURE_KELVIN);
     DEBUG("num_real_particles_in_locbox            = %ld\n", num_real_particles_in_locbox);
     DEBUG("num_real_particles_per_virtual_particle = %ld\n", num_real_particles_per_virtual_particle);
 
@@ -273,18 +287,6 @@ void init_particle(particle_t * p)
     int32_t x_nm, y_nm, z_nm;
     int32_t x_dir, y_dir, z_dir, hypot, xv_nmperdt, yv_nmperdt, zv_nmperdt;
     locbox_t * lb;
-
-    static int64_t velocity_nmperdt, velocity_mpers;
-
-    // initialize velocity_nmperdt, if not already initialized;
-    // all particles will be given this velocity,
-    // which is equivalent to ROOM_TEMPERATURE_KELVIN
-    if (velocity_nmperdt == 0) {
-        velocity_mpers = TEMPERATURE_TO_VELOCITY(ROOM_TEMPERATURE_KELVIN, D2_KG);
-        velocity_nmperdt = velocity_mpers * DELTA_T_NS;
-        DEBUG("velocity_mpers    = %ld\n", velocity_mpers);
-        DEBUG("velocity_nmperdt  = %ld\n", velocity_nmperdt);
-    }
 
     // get a random location 
     while (true) {
@@ -309,16 +311,16 @@ void init_particle(particle_t * p)
             break;
         }
     }
-    xv_nmperdt = (int64_t)x_dir * velocity_nmperdt / hypot;
-    yv_nmperdt = (int64_t)y_dir * velocity_nmperdt / hypot;
-    zv_nmperdt = (int64_t)z_dir * velocity_nmperdt / hypot;
+    xv_nmperdt = (int64_t)x_dir * roomtemp_velocity_nmperdt / hypot;
+    yv_nmperdt = (int64_t)y_dir * roomtemp_velocity_nmperdt / hypot;
+    zv_nmperdt = (int64_t)z_dir * roomtemp_velocity_nmperdt / hypot;
 
 #if 1
     // sanity check
-    int64_t check_velocity_nmperdt = hypotenuse(xv_nmperdt, yv_nmperdt, zv_nmperdt);
-    if (abs(check_velocity_nmperdt-velocity_nmperdt) > 2) {
-        FATAL("velocity_nmperdt = %ld  check_velocity_nmperdt = %ld\n", 
-              velocity_nmperdt, check_velocity_nmperdt);
+    int32_t check_velocity_nmperdt = hypotenuse(xv_nmperdt, yv_nmperdt, zv_nmperdt);
+    if (abs(check_velocity_nmperdt-roomtemp_velocity_nmperdt) > 2) {
+        FATAL("roomtemp_velocity_nmperdt = %d  check_velocity_nmperdt = %d\n", 
+              roomtemp_velocity_nmperdt, check_velocity_nmperdt);
     }
 #endif
 
@@ -330,10 +332,9 @@ void init_particle(particle_t * p)
     p->xv_nmperdt = xv_nmperdt;
     p->yv_nmperdt = yv_nmperdt;
     p->zv_nmperdt = zv_nmperdt;
-    p->velocity_squared_m2pers2 = velocity_mpers * velocity_mpers;
+    p->velocity_squared_m2pers2 = (int64_t)roomtemp_velocity_mpers * (int64_t)roomtemp_velocity_mpers;
 
     // init particle: add to locbox list
-    p->lb = lb;
     LIST_INSERT_HEAD(&lb->particle_list_head, p, entries);
 
     // init particle: updata associated radius info
@@ -373,16 +374,20 @@ void model_terminate(void)
     model_stop();
 }
 
-// -----------------  MODEL ------------------------------------------------------------------
+// -----------------  MODEL THREADS  ---------------------------------------------------------
 
-static uint64_t processed, moved;
+static struct {
+    int64_t start_us;
+    int64_t done_us;
+    int64_t processed;
+    int64_t moved_locbox;
+    int64_t moved_radius;
+} stats;
+
 void * control_thread(void * cx)
 {
-#if 0 // XXX
-    uint64_t start_us, done_us;
-
     while (true) {
-        // wait for run_flag to be set
+        // wait for run_request to be set
         if (!run_request) {
             running = false;
             while (run_request == false) {
@@ -391,48 +396,44 @@ void * control_thread(void * cx)
             running = true;
         }
 
-        // advance time
+        // initialize for this cycle
         time_ns += DELTA_T_NS;
-
-        // xxxx
         locbox_list_idx = 0;
+        memset(&stats,0,sizeof(stats));
 
-        processed = 0;
-        moved = 0;
-
-        // release threads
-        INFO("RELEASE THREADS for time %ld ns\n", time_ns);
-        start_us = microsec_timer();
+        // release the work threads
+        DEBUG("cycle start: time_ns = %ld\n", time_ns);
+        stats.start_us = microsec_timer();
         pthread_barrier_wait(&barrier);
 
-        // wait for threads to complete
+        // wait for the work threads to complete
         pthread_barrier_wait(&barrier);
-        done_us = microsec_timer();
-        INFO("THREADS DONE for time %ld ns - duration %ld us - processed %ld moved %ld\n", 
-             time_ns, done_us - start_us,
-             processed, moved);
-        //sleep(5); //XXX
+        stats.done_us = microsec_timer();
+        DEBUG("cycle complete: duration = %ld  processed = %ld  moved_locbox = %ld  moved_radius = %ld\n",
+              stats.done_us - stats.start_us,
+              stats.processed,
+              stats.moved_locbox,
+              stats.moved_radius);
     }
-#endif
-    return NULL;
 }
 
 void * work_thread(void * cx)
 {
-#if 0 // XXX
-    int32_t    thread_id  __attribute__ ((unused)) = (int64_t)cx;
-    int32_t    idx;
-    locbox_t * lb;
+    int32_t      thread_id  __attribute__ ((unused)) = (int64_t)cx;
+    int32_t      idx;
+    locbox_t   * lb;
+    locbox_t   * new_lb;
     particle_t * p;
-
+    particle_t * p_next;
     LIST_HEAD(head_s, particle_s) moved_list_head;
+
+    DEBUG("starting thread_id = %d\n", thread_id);
 
     while (true) {
         // wait to be started 
         pthread_barrier_wait(&barrier);
-        //INFO("starting thread_id %d\n", thread_id);
 
-        // loop until no more location boxes remain
+        // loop until all locbox have been processed
         // - get the next location box 
         // - process all the particles within the location box
         //   that have not already been processed 
@@ -444,121 +445,122 @@ void * work_thread(void * cx)
             }
             lb = locbox_list[idx];
 
-            // AAA locking
-            pthread_spin_lock(&lb->particle_list_spinlock);
-    
+            // init moved_list_head; this is used to save a list of
+            // the particles that will be moved from this locbox, so that
+            // these can be processed after releasing the particle_list_spinlock
             LIST_INIT(&moved_list_head);
 
+            // acquire spinlock to protect access to the locbox's particle_list
+            pthread_spin_lock(&lb->particle_list_spinlock);
+    
             // loop over all particles within the location box,
             // and process them if they have not already been
             // processed; a particle may already have been processed
             // if it has just been moved into this location box
-            particle_t * next_p;
-            for (p = lb->particle_list_head.lh_first; p != NULL; p = next_p) {
-                next_p = p->entries.le_next;
-                //locbox_t * xxxlb, * afterlb;
-                //xxxlb = get_locbox(p->x_nm, p->y_nm, p->z_nm);
-                //INFO("lb %ld   xxxlb %ld\n",
-                    //lb - &locbox[0][0][0],
-                    //xxxlb - &locbox[0][0][0]);
+            for (p = lb->particle_list_head.lh_first; p != NULL; p = p_next) {
+                // save ptr to the next particle in the list
+                p_next = p->entries.le_next;
 
+                // if the particle has already been processed then continue
                 if (p->last_processed_time_ns == time_ns) {
                     continue;
                 }
 
-                // AAA acceleration of ions, store the accel in locbox
-
-                //INFO("p_idx  %ld\n", p - particles);
-                //INFO("before %d %d %d\n", p->x_nm, p->y_nm, p->z_nm);
+                // update the particle's position, and 
+                // determine the locbox it is now in following the position update
                 p->x_nm += p->xv_nmperdt;
                 p->y_nm += p->yv_nmperdt;
                 p->z_nm += p->zv_nmperdt;
-                //INFO("after %d %d %d\n", p->x_nm, p->y_nm, p->z_nm);
-                //afterlb = get_locbox(p->x_nm, p->y_nm, p->z_nm);
-                //INFO("lb %ld   afterlb %ld\n",
-                    //lb - &locbox[0][0][0],
-                    //afterlb - &locbox[0][0][0]);
-
-                locbox_t * new_lb;
                 new_lb = get_locbox(p->x_nm, p->y_nm, p->z_nm);
 
-                // XXX if outside chamber then put it back , and set new dir
-                if (new_lb->radius_idx >= max_radius) {
-                    //INFO("outside chamber ridx %d\n", new_lb->radius_idx);
+                // if the particle is now outside the chamber then 
+                // - put the particle back where it was, and
+                // - update its velocity to be roomtemp toward the center of the chamber
+                if (__glibc_unlikely(new_lb->radius_idx >= max_radius)) {
+                    // put the particle back where it was
                     p->x_nm -= p->xv_nmperdt;
                     p->y_nm -= p->yv_nmperdt;
                     p->z_nm -= p->zv_nmperdt;
                     new_lb = lb;
 
-                    // AAA set new dir towards center of chamber
-                    int64_t r_nm = hypotenuse(p->x_nm, p->y_nm, p->z_nm);  // AAA use lb->xxxx
-                    int64_t target_velocity_mpers = 1000;  // XXX calc from physics
-                    int64_t target_velocity_nmperdt = target_velocity_mpers * DELTA_T_NS;
+                    // update its velocity to be roomtemp toward the center of the chamber
+                    p->xv_nmperdt = (int64_t)(-p->x_nm) * roomtemp_velocity_nmperdt / lb->r_nm;
+                    p->yv_nmperdt = (int64_t)(-p->y_nm) * roomtemp_velocity_nmperdt / lb->r_nm;
+                    p->zv_nmperdt = (int64_t)(-p->z_nm) * roomtemp_velocity_nmperdt / lb->r_nm;
 
-                    p->xv_nmperdt = -p->x_nm * target_velocity_nmperdt / r_nm;
-                    p->yv_nmperdt = -p->y_nm * target_velocity_nmperdt / r_nm;
-                    p->zv_nmperdt = -p->z_nm * target_velocity_nmperdt / r_nm;
-
+#if 0 // XXX debug, delete
                     static bool first = true;
                     if (first) {
                         first = false;
                         int32_t vel = hypotenuse(p->xv_nmperdt, p->yv_nmperdt, p->zv_nmperdt);
-        
-                        INFO("vel = %d  target_vel = %ld   vel_vect= %d %d %d  pos = %d %d %d\n",
-                            vel, target_velocity_nmperdt, 
-                            p->xv_nmperdt, p->yv_nmperdt, p->zv_nmperdt,
-                            p->x_nm, p->y_nm, p->z_nm);
+                        DEBUG("vel = %d  roomtemp_vel = %d   vel_vect= %d %d %d  pos = %d %d %d\n",
+                              vel, roomtemp_velocity_nmperdt, 
+                              p->xv_nmperdt, p->yv_nmperdt, p->zv_nmperdt,
+                              p->x_nm, p->y_nm, p->z_nm);
                     }
+#endif
                 }
 
-                p->last_processed_time_ns = time_ns;
-
-                // XXX needs locking
-                __sync_fetch_and_add(&processed,1);
-                if (new_lb != lb) {
-                    // AAA
-                    //INFO("moving to new locbox\n");
-                    // remove from list
+                // if the particle has moved to another locbox then
+                // remove it from this locbox list, and add it to the
+                // moved_list; the reason for the moved_list is that we
+                // can not put this particle on the new_lb particle_list 
+                // at this time due to a possible deadlock; we first 
+                // need to drop the particle_list_spinlock
+                if (__glibc_unlikely(new_lb != lb)) {
                     LIST_REMOVE(p, entries);
                     LIST_INSERT_HEAD(&moved_list_head, p, entries);
-                    // add to other list
-                    // XXX also need to flag so it is not reprocessed;
-                    //     maybe set thetime idx of the particle
                 } 
 
+                // indicate that this particle has been processed
+                p->last_processed_time_ns = time_ns;
+                __sync_fetch_and_add(&stats.processed,1);
                     
             }
 
-            // AAA locking
+            // unlock the particle_list_spinlock
             pthread_spin_unlock(&lb->particle_list_spinlock);
 
-            // AAA moved list
-            radius_t * r;
+            // process the moved_list
             while ((p = moved_list_head.lh_first) != NULL) {
-                LIST_REMOVE(moved_list_head.lh_first, entries);
-                r = &radius[p->lb->radius_idx];
-                __sync_fetch_and_sub(&r->number_of_atoms,1); // AAA ions
-                __sync_fetch_and_sub(&r->sum_velocity_squared_m2pers2, p->velocity_squared_m2pers2);
+                LIST_REMOVE(p, entries);
 
-                locbox_t * new_lb;
+                // determine the new locbox that the particle is being moved to
                 new_lb = get_locbox(p->x_nm, p->y_nm, p->z_nm);
+
+                // if the new locbox is contained in a different radius shell then
+                // update the old and new radius shells
+                if (new_lb->radius_idx != lb->radius_idx) {
+                    radius_t * r_old = &radius[lb->radius_idx];
+                    if (!p->ion) {
+                        __sync_fetch_and_sub(&r_old->number_of_atoms,1);
+                    } else {
+                        __sync_fetch_and_sub(&r_old->number_of_ions,1);
+                    }
+                    __sync_fetch_and_sub(&r_old->sum_velocity_squared_m2pers2, p->velocity_squared_m2pers2);
+
+                    radius_t * r_new = &radius[new_lb->radius_idx];
+                    if (!p->ion) {
+                        __sync_fetch_and_add(&r_new->number_of_atoms,1);
+                    } else {
+                        __sync_fetch_and_add(&r_new->number_of_ions,1);
+                    }
+                    __sync_fetch_and_add(&r_new->sum_velocity_squared_m2pers2, p->velocity_squared_m2pers2);
+
+                    __sync_fetch_and_add(&stats.moved_radius,1);
+                }
+
+                // add the particle to the particle_list in the new locbox
                 pthread_spin_lock(&new_lb->particle_list_spinlock);
                 LIST_INSERT_HEAD(&new_lb->particle_list_head, p, entries);
-                p->lb = new_lb;
                 pthread_spin_unlock(&new_lb->particle_list_spinlock);
-                r = &radius[p->lb->radius_idx];
-                __sync_fetch_and_add(&r->number_of_atoms,1); // AAA ions
-                __sync_fetch_and_add(&r->sum_velocity_squared_m2pers2, p->velocity_squared_m2pers2);
 
-                __sync_fetch_and_add(&moved,1);
+                // stats update
+                __sync_fetch_and_add(&stats.moved_locbox,1);
             }
-            // AAA radius stuff,  use atomics
         }
 
-        // indicate completed
-        //INFO("done thread_id %d\n", thread_id);
+        // indicate completed to the control_thread
         pthread_barrier_wait(&barrier);
     }
-#endif
-    return NULL;
 }
