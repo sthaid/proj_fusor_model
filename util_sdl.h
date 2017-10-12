@@ -144,8 +144,10 @@ typedef struct {
 //
 
 // window initialize, and get_state
-int32_t sdl_init(int32_t w, int32_t h, char * screenshot_prefix, int32_t * max_texture_dim);
+int32_t sdl_init(int32_t * w, int32_t * h, bool resizeable, bool scale_fonts_when_window_resized,
+                 char * screenshot_prefix);
 void sdl_get_state(int32_t * win_width, int32_t * win_height, bool * win_minimized);
+void sdl_get_max_texture_dim(int32_t * max_texture_dim);
 
 // display init and present
 void sdl_display_init(void);

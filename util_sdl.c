@@ -20,8 +20,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-// XXX need to adjust font size when window size changes
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -118,10 +116,14 @@ static uint32_t         sdl_color_to_rgba[] = {
                                (  0 << 24) | (  0 << 16) | (  0 << 8) | 255,     // BLACK       
                                         };
 
+static char           * sdl_font_path;
+static bool             sdl_scale_fonts_when_window_resized;
+
 //
 // prototypes
 //
 
+static int32_t sdl_init_fonts(void);
 static void sdl_exit_handler(void);
 static void sdl_set_color(int32_t color); 
 
@@ -140,20 +142,22 @@ static inline uint32_t _bswap32(uint32_t a)
 
 // -----------------  SDL INIT & CLOSE  --------------------------------- 
 
-int32_t sdl_init(int32_t w, int32_t h, char * screenshot_prefix, int32_t * max_texture_dim)
+int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool scale_fonts_when_window_resized, 
+                 char * screenshot_prefix)
 {
-    #define SDL_FLAGS SDL_WINDOW_RESIZABLE
+    #define SDL_FLAGS (resizeable ? SDL_WINDOW_RESIZABLE : 0)
     #define MAX_FONT_SEARCH_PATH 3
 
-    char   *font_path;
-    int32_t font0_ptsize, font1_ptsize;
-    char    font_search_path[MAX_FONT_SEARCH_PATH][PATH_MAX];
+    sdl_event_t       * event;
+    char                font_search_path[MAX_FONT_SEARCH_PATH][PATH_MAX];
+
     static const char * font_filename = "FreeMonoBold.ttf";
 
-    // save copy of screenshot_prefix
+    // save configuration params
     if (screenshot_prefix) {
         strcpy(sdl_screenshot_prefix, screenshot_prefix);
     }
+    sdl_scale_fonts_when_window_resized = scale_fonts_when_window_resized;
 
     // display available and current video drivers
     int num, i;
@@ -170,12 +174,20 @@ int32_t sdl_init(int32_t w, int32_t h, char * screenshot_prefix, int32_t * max_t
     }
 
     // create SDL Window and Renderer
-    if (SDL_CreateWindowAndRenderer(w, h, SDL_FLAGS, &sdl_window, &sdl_renderer) != 0) {
+    if (SDL_CreateWindowAndRenderer(*w, *h, SDL_FLAGS, &sdl_window, &sdl_renderer) != 0) {
         ERROR("SDL_CreateWindowAndRenderer failed\n");
         return -1;
     }
-    SDL_GetWindowSize(sdl_window, &sdl_win_width, &sdl_win_height);
+
+    // the size of the created window may be different than what was requested
+    // - call sdl_poll_event to flush all of the initial events,
+    //   and especially to process the SDL_WINDOWEVENT_SIZE_CHANGED event
+    //   which will update sdl_win_width and sdl_win_height
+    // - return the updated window width & height to caller
+    event = sdl_poll_event();
     INFO("sdl_win_width=%d sdl_win_height=%d\n", sdl_win_width, sdl_win_height);
+    *w = sdl_win_width;
+    *h = sdl_win_height;
 
 #ifdef ENABLE_BUTTON_SOUND
     // init button_sound
@@ -197,17 +209,17 @@ int32_t sdl_init(int32_t w, int32_t h, char * screenshot_prefix, int32_t * max_t
         return -1;
     }
 
-    // search for FreeMonoBold.ttf font file in possible locations
+    // determine sdl_font_path by searching for FreeMonoBold.ttf font file in possible locations
     // note - fonts can be installed using:
     //   sudo yum install gnu-free-mono-fonts       # rhel,centos,fedora
     //   sudo apt-get install fonts-freefont-ttf    # raspberrypi, ubuntu
     sprintf(font_search_path[0], "%s/%s", "/usr/share/fonts/gnu-free", font_filename);
     sprintf(font_search_path[1], "%s/%s", "/usr/share/fonts/truetype/freefont", font_filename);
-    sprintf(font_search_path[2], "%s/%s/%s", getenv("HOME"), "proj_fusor/support/fonts", font_filename);
+    sprintf(font_search_path[2], "%s/%s/%s", getenv("HOME"), "my_fonts", font_filename);
     for (i = 0; i < MAX_FONT_SEARCH_PATH; i++) {
         struct stat buf;
-        font_path = font_search_path[i];
-        if (stat(font_path, &buf) == 0) {
+        sdl_font_path = font_search_path[i];
+        if (stat(sdl_font_path, &buf) == 0) {
             break;
         }
     }
@@ -215,58 +227,12 @@ int32_t sdl_init(int32_t w, int32_t h, char * screenshot_prefix, int32_t * max_t
         ERROR("failed to locate font file\n");
         return -1;
     }
-    INFO("using font %s\n", font_path);
+    INFO("using font %s\n", sdl_font_path);
 
-    // initialize font0 and font0_underline,
-    // this is the small font 
-    font0_ptsize = sdl_win_height / 30 - 1;
-    sdl_font[0].font = TTF_OpenFont(font_path, font0_ptsize);
-    if (sdl_font[0].font == NULL) {
-        ERROR("failed TTF_OpenFont %s\n", font_path);
+    // call sdl_init_fonts, this initializes the font sizes based on sdl_win_height
+    if (sdl_init_fonts() != 0) {
+        ERROR("sdl_init_fonts failed\n");
         return -1;
-    }
-    sdl_font[0].font_underline = TTF_OpenFont(font_path, font0_ptsize);
-    if (sdl_font[0].font == NULL) {
-        ERROR("failed TTF_OpenFont %s\n", font_path);
-        return -1;
-    }
-    TTF_SizeText(sdl_font[0].font, "X", &sdl_font[0].char_width, &sdl_font[0].char_height);
-    TTF_SetFontStyle(sdl_font[0].font_underline, TTF_STYLE_UNDERLINE|TTF_STYLE_BOLD);
-    INFO("font0 psize=%d width=%d height=%d\n", 
-         font0_ptsize, sdl_font[0].char_width, sdl_font[0].char_height);
-
-    // initialize font1 and font1_underline,
-    // this is the large font 
-    font1_ptsize = sdl_win_height / 18 - 1;
-    sdl_font[1].font = TTF_OpenFont(font_path, font1_ptsize);
-    if (sdl_font[1].font == NULL) {
-        ERROR("failed TTF_OpenFont %s\n", font_path);
-        return -1;
-    }
-    sdl_font[1].font_underline = TTF_OpenFont(font_path, font1_ptsize);
-    if (sdl_font[1].font == NULL) {
-        ERROR("failed TTF_OpenFont %s\n", font_path);
-        return -1;
-    }
-    TTF_SizeText(sdl_font[1].font, "X", &sdl_font[1].char_width, &sdl_font[1].char_height);
-    TTF_SetFontStyle(sdl_font[1].font_underline, TTF_STYLE_UNDERLINE|TTF_STYLE_BOLD);
-    INFO("font1 psize=%d width=%d height=%d\n", 
-         font1_ptsize, sdl_font[1].char_width, sdl_font[1].char_height);
-
-    // return the max texture dimension to caller;
-    // - SDL provides us with max_texture_width and max_texture_height, usually the same
-    // - the min of max_texture_width/height is returned to caller
-    // - this returned max_texture_dim is to be used by the caller to limit the maximum
-    //   width and height args passed to sdl_create_texture()
-    if (SDL_GetRendererInfo(sdl_renderer, &sdl_renderer_info) != 0) {
-        ERROR("SDL_SDL_GetRendererInfo failed\n");
-        return -1;
-    }
-    INFO("max_texture_width=%d  max_texture_height=%d\n",
-         sdl_renderer_info.max_texture_width, sdl_renderer_info.max_texture_height);
-    if (max_texture_dim) {
-        *max_texture_dim = min(sdl_renderer_info.max_texture_width, 
-                               sdl_renderer_info.max_texture_height);
     }
 
     // currently the SDL Text Input feature is not being used here
@@ -277,6 +243,68 @@ int32_t sdl_init(int32_t w, int32_t h, char * screenshot_prefix, int32_t * max_t
 
     // return success
     INFO("success\n");
+    return 0;
+}
+
+static int32_t sdl_init_fonts(void)
+{
+    int32_t i;
+    int32_t font0_ptsize, font1_ptsize;
+
+    // if sdl_font_path has not been set then return error
+    if (sdl_font_path == NULL) {
+        return -1;
+    }
+
+    // close fonts if they have been previously opened
+    for (i = 0; i < MAX_FONT; i++) {
+        if (sdl_font[i].font) {
+            TTF_CloseFont(sdl_font[i].font);
+            sdl_font[i].font = NULL;
+        }
+        if (sdl_font[i].font_underline) {
+            TTF_CloseFont(sdl_font[i].font_underline);
+            sdl_font[i].font_underline = NULL;
+        }
+    }
+
+    // initialize font0 and font0_underline,
+    // this is the small font 
+    font0_ptsize = sdl_win_height / 30 - 1;
+    sdl_font[0].font = TTF_OpenFont(sdl_font_path, font0_ptsize);
+    if (sdl_font[0].font == NULL) {
+        ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
+        return -1;
+    }
+    sdl_font[0].font_underline = TTF_OpenFont(sdl_font_path, font0_ptsize);
+    if (sdl_font[0].font == NULL) {
+        ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
+        return -1;
+    }
+    TTF_SizeText(sdl_font[0].font, "X", &sdl_font[0].char_width, &sdl_font[0].char_height);
+    TTF_SetFontStyle(sdl_font[0].font_underline, TTF_STYLE_UNDERLINE|TTF_STYLE_BOLD);
+    INFO("font0 psize=%d width=%d height=%d\n", 
+         font0_ptsize, sdl_font[0].char_width, sdl_font[0].char_height);
+
+    // initialize font1 and font1_underline,
+    // this is the large font 
+    font1_ptsize = sdl_win_height / 18 - 1;
+    sdl_font[1].font = TTF_OpenFont(sdl_font_path, font1_ptsize);
+    if (sdl_font[1].font == NULL) {
+        ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
+        return -1;
+    }
+    sdl_font[1].font_underline = TTF_OpenFont(sdl_font_path, font1_ptsize);
+    if (sdl_font[1].font == NULL) {
+        ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
+        return -1;
+    }
+    TTF_SizeText(sdl_font[1].font, "X", &sdl_font[1].char_width, &sdl_font[1].char_height);
+    TTF_SetFontStyle(sdl_font[1].font_underline, TTF_STYLE_UNDERLINE|TTF_STYLE_BOLD);
+    INFO("font1 psize=%d width=%d height=%d\n", 
+         font1_ptsize, sdl_font[1].char_width, sdl_font[1].char_height);
+
+    // return success
     return 0;
 }
 
@@ -293,6 +321,7 @@ static void sdl_exit_handler(void)
 
     for (i = 0; i < MAX_FONT; i++) {
         TTF_CloseFont(sdl_font[i].font);
+        TTF_CloseFont(sdl_font[i].font_underline);
     }
     TTF_Quit();
 
@@ -312,6 +341,23 @@ void sdl_get_state(int32_t * win_width, int32_t * win_height, bool * win_minimiz
     if (win_minimized) {
         *win_minimized = sdl_win_minimized;
     }
+}
+
+void sdl_get_max_texture_dim(int32_t * max_texture_dim)
+{
+    // return the max texture dimension to caller;
+    // - SDL provides us with max_texture_width and max_texture_height, usually the same
+    // - the min of max_texture_width/height is returned to caller
+    // - this returned max_texture_dim is to be used by the caller to limit the maximum
+    //   width and height args passed to sdl_create_texture()
+    if (SDL_GetRendererInfo(sdl_renderer, &sdl_renderer_info) != 0) {
+        ERROR("SDL_SDL_GetRendererInfo failed\n");
+        *max_texture_dim = 0;
+    }
+    INFO("max_texture_width=%d  max_texture_height=%d\n",
+         sdl_renderer_info.max_texture_width, sdl_renderer_info.max_texture_height);
+    *max_texture_dim = min(sdl_renderer_info.max_texture_width, 
+                           sdl_renderer_info.max_texture_height);
 }
 
 // -----------------  DISPLAY INIT AND PRESENT  ------------------------- 
@@ -708,6 +754,9 @@ sdl_event_t * sdl_poll_event(void)
                 sdl_win_width = ev.window.data1;
                 sdl_win_height = ev.window.data2;
                 event.event = SDL_EVENT_WIN_SIZE_CHANGE;
+                if (sdl_scale_fonts_when_window_resized) {
+                    sdl_init_fonts(); 
+                }
                 break;
             case SDL_WINDOWEVENT_MINIMIZED:
                 sdl_win_minimized = true;
