@@ -148,8 +148,7 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool scale_fonts_when_
     #define SDL_FLAGS (resizeable ? SDL_WINDOW_RESIZABLE : 0)
     #define MAX_FONT_SEARCH_PATH 3
 
-    sdl_event_t       * event;
-    char                font_search_path[MAX_FONT_SEARCH_PATH][PATH_MAX];
+    char font_search_path[MAX_FONT_SEARCH_PATH][PATH_MAX];
 
     static const char * font_filename = "FreeMonoBold.ttf";
 
@@ -184,7 +183,7 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool scale_fonts_when_
     //   and especially to process the SDL_WINDOWEVENT_SIZE_CHANGED event
     //   which will update sdl_win_width and sdl_win_height
     // - return the updated window width & height to caller
-    event = sdl_poll_event();
+    sdl_poll_event();
     INFO("sdl_win_width=%d sdl_win_height=%d\n", sdl_win_width, sdl_win_height);
     *w = sdl_win_width;
     *h = sdl_win_height;
