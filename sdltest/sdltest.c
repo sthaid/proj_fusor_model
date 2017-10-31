@@ -47,6 +47,7 @@ SOFTWARE.
 
 static int32_t pane_handler_demo(pane_cx_t * cx, int32_t request, void * init, sdl_event_t * event);
 static int32_t pane_handler_points_test(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event);
+static int32_t pane_handler_lines_test(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event);
 static bool display_redraw_needed(uint64_t time_render_us);
 
 // -----------------  MAIN  ------------------------------------------------
@@ -104,7 +105,8 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
     #define SDL_EVENT_NEW_DEMO_PANE    (SDL_EVENT_USER_DEFINED+2)
     #define SDL_EVENT_NEW_TEXT_PANE    (SDL_EVENT_USER_DEFINED+3)
     #define SDL_EVENT_NEW_POINTS_PANE  (SDL_EVENT_USER_DEFINED+4)
-    #define SDL_EVENT_NEW_DISPLAY      (SDL_EVENT_USER_DEFINED+5)
+    #define SDL_EVENT_NEW_LINES_PANE   (SDL_EVENT_USER_DEFINED+5)
+    #define SDL_EVENT_NEW_DISPLAY      (SDL_EVENT_USER_DEFINED+6)
 
     #define CIRCLE_RADIUS (pane_cx->pane.w / 10)
 
@@ -195,9 +197,14 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
             pane, 7, 0, 0, "NEW_POINTS", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_POINTS_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
+        // 'NEW_LINES' create the lines test pane
+        sdl_render_text_and_register_event(
+            pane, 8, 0, 0, "NEW_LINES", LIGHT_BLUE, BLACK, 
+            SDL_EVENT_NEW_LINES_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
         // 'NEW_DISPLAY' chain to another display
         sdl_render_text_and_register_event(
-            pane, 8, 0, 0, "NEW_DISPLAY", LIGHT_BLUE, BLACK, 
+            pane, 9, 0, 0, "NEW_DISPLAY", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_DISPLAY, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // moving circle
@@ -254,6 +261,10 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
             case SDL_EVENT_NEW_POINTS_PANE:
                 sdl_pane_create(pane_cx->pane_list_head, pane_handler_points_test, NULL,
                                 400, 0, 804, 804, PANE_BORDER_STYLE_MINIMAL);
+                return PANE_HANDLER_RET_DISPLAY_REDRAW;
+            case SDL_EVENT_NEW_LINES_PANE:
+                sdl_pane_create(pane_cx->pane_list_head, pane_handler_lines_test, NULL,
+                                400, 400, 400, 400, PANE_BORDER_STYLE_STANDARD);
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_DISPLAY:
                 sdl_pane_manager(display_redraw_needed, 1,
@@ -349,13 +360,95 @@ static int32_t pane_handler_points_test(pane_cx_t * pane_cx, int32_t request, vo
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
+static int32_t pane_handler_lines_test(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) 
+{
+    #define SDL_EVENT_MOUSE_MOTION (SDL_EVENT_USER_DEFINED+0)
+
+    #define MAX_POINTS 1000
+
+    struct {
+        point_t points[MAX_POINTS];
+        int32_t x_off;
+        int32_t y_off;
+    } * vars = pane_cx->vars;
+    rect_t * pane = &pane_cx->pane;
+
+    // ----------------------------
+    // -------- INITIALIZE --------
+    // ----------------------------
+
+    if (request == PANE_HANDLER_REQ_INITIALIZE) {
+        #define SCALE (4. * pane->h / pane->w / pane->w)
+        vars = pane_cx->vars = calloc(1,sizeof(*vars));
+        int32_t i, x;
+
+        for (i = 0; i < MAX_POINTS; i++) {
+            x = i - MAX_POINTS / 2;
+            vars->points[i].x = x + pane->w / 2;
+            vars->points[i].y = pane->h - x * x * SCALE;
+        }
+        vars->x_off = 0;
+        vars->y_off = 0;
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // ------------------------
+    // -------- RENDER --------
+    // ------------------------
+
+    if (request == PANE_HANDLER_REQ_RENDER) {
+        point_t points[MAX_POINTS];
+        rect_t locf = {0,0,pane->w,pane->h};
+        int32_t i;
+
+        for (i = 0; i < MAX_POINTS; i++) {
+            points[i].x = vars->points[i].x + vars->x_off;
+            points[i].y = vars->points[i].y + vars->y_off;
+        }
+        sdl_render_lines(pane, points, MAX_POINTS, ORANGE);
+
+        sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_TYPE_MOUSE_MOTION, pane_cx);
+
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // -----------------------
+    // -------- EVENT --------
+    // -----------------------
+
+    if (request == PANE_HANDLER_REQ_EVENT) {
+        switch(event->event_id) {
+        case SDL_EVENT_MOUSE_MOTION:
+            vars->x_off += event->mouse_motion.delta_x;
+            vars->y_off += event->mouse_motion.delta_y;
+            return PANE_HANDLER_RET_DISPLAY_REDRAW;
+        }
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // ---------------------------
+    // -------- TERMINATE --------
+    // ---------------------------
+
+    if (request == PANE_HANDLER_REQ_TERMINATE) {
+        free(vars);
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // not reached
+    assert(0);
+    return PANE_HANDLER_RET_NO_ACTION;
+}
+
 static bool display_redraw_needed(uint64_t time_render_us)
 {
     // XXX is there a better way than this
     return microsec_timer() - time_render_us > 30000;
 }
 
-#if 0  // TEMPLATE
+// -----------------  PANE HANDLER TEMPLATE  -------------------------------
+
+#if 0
 static int32_t pane_handler_xxx(pane_cx_t * pane_cx, int32_t request, sdl_event_t * event) 
 {
     struct {

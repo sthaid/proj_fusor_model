@@ -24,7 +24,7 @@ SOFTWARE.
 // XXX ctrl key not working
 // XXX mouse fliccker problem
 // XXX comments on all APIs
-// XXX provide examples on how to use this
+// XXX document examples on how to use this
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1154,7 +1154,7 @@ void sdl_render_printf(rect_t * pane, int32_t row, int32_t col, int32_t font_id,
 
 // -----------------  RENDER RECTANGLES & LINES  ------------------------ 
 
-// XXX routines in this section need to support clippling
+// XXX sdl_render_rect, and sdl_render_fill_rect needs to support clipping
 
 void sdl_render_rect(rect_t * pane, rect_t * loc, int32_t line_width, int32_t color)
 {
@@ -1195,19 +1195,16 @@ void sdl_render_fill_rect(rect_t * pane, rect_t * loc, int32_t color)
 
 void sdl_render_line(rect_t * pane, int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t color)
 {
-    sdl_set_color(color);
-
-    x1 += pane->x;
-    y1 += pane->y;
-    x2 += pane->x;
-    y2 += pane->y;
-    SDL_RenderDrawLine(sdl_renderer, x1,y1,x2,y2);
+    point_t points[2] = { {x1,y1}, {x2,y2} };
+    sdl_render_lines(pane, points, 2, color);
 }
 
 void sdl_render_lines(rect_t * pane, point_t * points, int32_t count, int32_t color)
 {
-    int32_t i;
-    SDL_Point sdl_points[count];
+    #define MAX_SDL_POINTS 1000
+
+    SDL_Point sdl_points[MAX_SDL_POINTS];
+    int32_t i, max=0;
 
     if (count <= 1) {
         return;
@@ -1215,12 +1212,31 @@ void sdl_render_lines(rect_t * pane, point_t * points, int32_t count, int32_t co
 
     sdl_set_color(color);
 
-    // XXX what is the limit
     for (i = 0; i < count; i++) {
-        sdl_points[i].x = points[i].x + pane->x;
-        sdl_points[i].y = points[i].y + pane->y;
+        if (points[i].x < 0 || points[i].x >= pane->w || points[i].y < 0 || points[i].y >= pane->h) {
+            // XXX sdl_render_lines should compute intersection with pane border, but this is too complicated for now
+            if (max) {
+                SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
+                max = 0;
+            }
+            continue;
+        }
+
+        sdl_points[max].x = points[i].x + pane->x;
+        sdl_points[max].y = points[i].y + pane->y;
+        max++;
+
+        if (max == MAX_SDL_POINTS) {
+            SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
+            sdl_points[0].x = sdl_points[MAX_SDL_POINTS-1].x;
+            sdl_points[0].y = sdl_points[MAX_SDL_POINTS-1].y;
+            max = 1;
+        }
     }
-    SDL_RenderDrawLines(sdl_renderer, sdl_points, count);
+
+    if (max) {
+        SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
+    }
 }
 
 void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_t radius,
@@ -1317,7 +1333,6 @@ void sdl_render_points(rect_t * pane, point_t * points, int32_t count, int32_t c
             x = points[i].x + peo[j].x;
             y = points[i].y + peo[j].y;
             if (x < 0 || x >= pane->w || y < 0 || y >= pane->h) {
-                INFO("SKIPPING %d %d\n", x, y);
                 continue;
             }
             sdl_points[sdl_points_count].x = pane->x + x;
@@ -1325,7 +1340,6 @@ void sdl_render_points(rect_t * pane, point_t * points, int32_t count, int32_t c
             sdl_points_count++;
 
             if (sdl_points_count == MAX_SDL_POINTS) {
-                INFO("RENDER 1\n");
                 SDL_RenderDrawPoints(sdl_renderer, sdl_points, sdl_points_count);
                 sdl_points_count = 0;
             }
@@ -1333,7 +1347,6 @@ void sdl_render_points(rect_t * pane, point_t * points, int32_t count, int32_t c
     }
 
     if (sdl_points_count > 0) {
-        INFO("RENDER 2 - %d\n", sdl_points_count);
         SDL_RenderDrawPoints(sdl_renderer, sdl_points, sdl_points_count);
         sdl_points_count = 0;
     }
@@ -1357,7 +1370,6 @@ texture_t sdl_create_texture(int32_t w, int32_t h)
     return (texture_t)texture;
 }
 
-// XXX use loc within the pane too
 texture_t sdl_create_texture_from_pane_pixels(rect_t * pane)
 {
     texture_t texture;
