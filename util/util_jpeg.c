@@ -28,9 +28,11 @@ SOFTWARE.
 #include <stddef.h>
 #include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 #include <errno.h>
-#include <inttypes.h>
+#include <time.h>
 #include <limits.h>
+#include <assert.h>
 
 #include <setjmp.h>
 #include <jpeglib.h>

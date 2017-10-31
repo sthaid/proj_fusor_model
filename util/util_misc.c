@@ -28,7 +28,12 @@ SOFTWARE.
 #include <stddef.h>
 #include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 #include <errno.h>
+#include <time.h>
+#include <limits.h>
+#include <assert.h>
+
 #include <inttypes.h>
 
 #include <sys/time.h>
@@ -293,3 +298,12 @@ int do_send(int sockfd, void * send_buff, size_t len)
 
     return len;
 }
+
+// -----------------  RANDOM NUMBERS  ------------------------------------
+
+inline int32_t random_range(int32_t min, int32_t max)
+{
+    int64_t extent = (int64_t)max - min + 1L;
+    return random() * extent / (RAND_MAX+1L) + min;
+}
+

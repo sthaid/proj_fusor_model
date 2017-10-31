@@ -4,15 +4,15 @@ TARGETS = model
 
 CC = gcc
 OUTPUT_OPTION=-MMD -MP -o $@
-CFLAGS = -g -O2 -pthread -mcmodel=medium -Wall -Wno-unused-variable $(shell sdl2-config --cflags) 
+CFLAGS = -g -O2 -pthread -mcmodel=medium -Wall $(shell sdl2-config --cflags) 
 
 SRC_MODEL = main.c \
             model.c \
-            util_sdl.c \
-            util_jpeg.c \
-            util_png.c \
-            util_sdl_predefined_displays.c \
-            util_misc.c
+            util/util_sdl.c \
+            util/util_sdl_predefined_panes.c \
+            util/util_jpeg.c \
+            util/util_png.c \
+            util/util_misc.c
 OBJ_MODEL=$(SRC_MODEL:.c=.o)
 
 DEP=$(SRC_MODEL:.c=.d)
@@ -34,5 +34,5 @@ model: $(OBJ_MODEL)
 #
 
 clean:
-	rm -f $(TARGETS) $(OBJ_MODEL) $(DEP)
+	rm -f $(TARGETS) $(OBJ_MODEL)$(DEP)
 

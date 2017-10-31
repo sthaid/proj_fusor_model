@@ -88,4 +88,8 @@ char * sock_addr_to_str(char * s, int slen, struct sockaddr * addr);
 int do_recv(int sockfd, void * recv_buff, size_t len);
 int do_send(int sockfd, void * send_buff, size_t len);
 
+// -----------------  RANDOM NUMBERS  ------------------------------------
+
+inline int32_t random_range(int32_t min, int32_t max);
+
 #endif

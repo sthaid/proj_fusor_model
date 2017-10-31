@@ -3,12 +3,29 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <stddef.h>
+#include <unistd.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <time.h>
+#include <limits.h>
+#include <assert.h>
+
+#if 0
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <math.h>
 #include <assert.h>
+#endif
 
+#include <math.h>
 #include <pthread.h>
 #include <sys/mman.h>
 
@@ -105,12 +122,6 @@ inline locbox_t * get_locbox(int32_t x_nm, int32_t y_nm, int32_t z_nm)
     assert(y_idx >= 0 && y_idx < MAX_LOCBOX);
     assert(z_idx >= 0 && z_idx < MAX_LOCBOX);
     return &locbox[x_idx][y_idx][z_idx];
-}
-
-inline int32_t random_range(int32_t min, int32_t max)
-{
-    int64_t extent = (int64_t)max - min + 1L;
-    return random() * extent / (RAND_MAX+1L) + min;
 }
 
 inline int32_t hypotenuse(int32_t x, int32_t y, int32_t z)
@@ -254,7 +265,7 @@ void model_init_from_params(char * params_str)
     DEBUG("max_particles   = %d\n", max_particles);
     DEBUG("initializing particles ...\n");
     for (i = 0; i < max_particles; i++) {
-        init_particle(&particles[i]);
+        // XXX init_particle(&particles[i]);
     }
     DEBUG("done initializing particles\n");
 
