@@ -4,7 +4,7 @@ TARGETS = model
 
 CC = gcc
 OUTPUT_OPTION=-MMD -MP -o $@
-CFLAGS = -g -O2 -pthread -mcmodel=medium -Wall $(shell sdl2-config --cflags) 
+CFLAGS = -g -O2 -pthread -mcmodel=medium -Wall -Iutil $(shell sdl2-config --cflags) 
 
 SRC_MODEL = main.c \
             model.c \

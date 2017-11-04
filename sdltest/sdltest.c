@@ -442,17 +442,17 @@ static int32_t pane_handler_lines_test(pane_cx_t * pane_cx, int32_t request, voi
 
 static bool display_redraw_needed(uint64_t time_render_us)
 {
-    // XXX is there a better way than this
     return microsec_timer() - time_render_us > 30000;
 }
 
 // -----------------  PANE HANDLER TEMPLATE  -------------------------------
 
 #if 0
-static int32_t pane_handler_xxx(pane_cx_t * pane_cx, int32_t request, sdl_event_t * event) 
+static int32_t pane_handler_xxx(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) 
 {
     struct {
     } * vars = pane_cx->vars;
+    rect_t * pane = &pane_cx->pane;
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -469,7 +469,6 @@ static int32_t pane_handler_xxx(pane_cx_t * pane_cx, int32_t request, sdl_event_
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        rect_t * pane = &pane_cx->pane;
         xxx
         return PANE_HANDLER_RET_NO_ACTION;
     }

@@ -1,3 +1,6 @@
+#ifndef __MODEL_H__
+#define __MODEL_H__
+
 //
 // XXX 
 // - review use of int64 vs 32
@@ -32,13 +35,14 @@
 #define LOCBOX_SIZE_MM                1L
 #define LOCBOX_VOLUME_CU_MM           CUBED(LOCBOX_SIZE_MM)
 #define MAX_LOCBOX                    ((MAX_CHAMBER_DIAMETER_MM + 10L) / LOCBOX_SIZE_MM)
+ // XXX ^^^ should this be even
 
 // radius
 #define RADIUS_SHELL_SIZE_MM          1L   // must be >= LOCBOX_SIZE_MM
 #define MAX_RADIUS                    (300L / RADIUS_SHELL_SIZE_MM)
 
 // particles
-#define AVERAGE_PARTICLES_PER_LOCBOX  10L
+#define AVERAGE_PARTICLES_PER_LOCBOX  10L  // XXX was 10L
 #define MAX_CHAMBER_VOLUME_CU_MM      (CUBED(MAX_CHAMBER_DIAMETER_MM/2) * 4L * 3141593L / 3000000L) 
 #define MAX_PARTICLES                 (MAX_CHAMBER_VOLUME_CU_MM / LOCBOX_VOLUME_CU_MM * AVERAGE_PARTICLES_PER_LOCBOX)
 
@@ -111,3 +115,4 @@ void model_start(void);
 void model_stop(void);
 void model_terminate(void);
 
+#endif

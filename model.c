@@ -12,19 +12,6 @@
 #include <limits.h>
 #include <assert.h>
 
-#if 0
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdarg.h>
-#include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <math.h>
-#include <assert.h>
-#endif
-
 #include <math.h>
 #include <pthread.h>
 #include <sys/mman.h>
@@ -55,7 +42,7 @@
 // locbox size in nanometers
 #define LOCBOX_SIZE_NM  (LOCBOX_SIZE_MM * 1000000L)
 
-// conversion functions
+// conversion functions  xxx need these in hdr file
 #define METERS_TO_INCHES(m)     ((m) * 39.3701)
 #define AMU_TO_KG(amu)          ((amu) * 1.66054e-27)
 #define MTORR_TO_PASCAL(mtorr)  ((mtorr) * 0.13332237)
@@ -265,7 +252,7 @@ void model_init_from_params(char * params_str)
     DEBUG("max_particles   = %d\n", max_particles);
     DEBUG("initializing particles ...\n");
     for (i = 0; i < max_particles; i++) {
-        // XXX init_particle(&particles[i]);
+        init_particle(&particles[i]);
     }
     DEBUG("done initializing particles\n");
 
@@ -283,7 +270,7 @@ void model_init_from_params(char * params_str)
     time_ns = 0;
 
     // create threads
-    max_worker_threads = sysconf(_SC_NPROCESSORS_ONLN);
+    max_worker_threads = sysconf(_SC_NPROCESSORS_ONLN) - 1;  // xxx comment save 1 for display
     DEBUG("creating control_thread and %d worker_threads ...\n", max_worker_threads);
     pthread_barrier_init(&barrier, NULL, max_worker_threads+1);
     pthread_create(&thread_id, NULL, control_thread, NULL);
@@ -448,6 +435,7 @@ void * work_thread(void * cx)
         // - get the next location box 
         // - process all the particles within the location box
         //   that have not already been processed 
+        // XXX try prefetch to improve performance
         while (true) {
             // get the next location box, if no more then break
             idx = __sync_fetch_and_add(&locbox_list_idx, 1);
@@ -499,7 +487,7 @@ void * work_thread(void * cx)
                     p->yv_nmperdt = (int64_t)(-p->y_nm) * roomtemp_velocity_nmperdt / lb->r_nm;
                     p->zv_nmperdt = (int64_t)(-p->z_nm) * roomtemp_velocity_nmperdt / lb->r_nm;
 
-#if 0 // XXX debug, delete
+#if 0 // xxx debug, delete
                     static bool first = true;
                     if (first) {
                         first = false;

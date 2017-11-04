@@ -21,7 +21,8 @@ SOFTWARE.
 */
 
 // XXX review
-// XXX ctrl key not working
+// XXX ctrl key not working, may be because I've enabled
+//          gsettings set org.gnome.settings-daemon.peripherals.mouse locate-pointer true
 // XXX mouse fliccker problem
 // XXX comments on all APIs
 // XXX document examples on how to use this
@@ -996,7 +997,7 @@ sdl_event_t * sdl_poll_event(void)
             // map key to event_id
             if (key < 128) {
                 event_id = key;
-                if (shift) {
+                if (shift) {  // XXX others such as < > 
                     if (event_id >= 'a' && event_id <= 'z') {
                         event_id = toupper(event_id);
                     } else if (event_id >= '0' && event_id <= '9') {
@@ -1214,7 +1215,8 @@ void sdl_render_lines(rect_t * pane, point_t * points, int32_t count, int32_t co
 
     for (i = 0; i < count; i++) {
         if (points[i].x < 0 || points[i].x >= pane->w || points[i].y < 0 || points[i].y >= pane->h) {
-            // XXX sdl_render_lines should compute intersection with pane border, but this is too complicated for now
+            // XXX sdl_render_lines should compute intersection with pane border, 
+            //     but this is too complicated for now
             if (max) {
                 SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
                 max = 0;
@@ -1243,15 +1245,15 @@ void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_
                        int32_t line_width, int32_t color)
 {
     int32_t count = 0, i, angle, x, y;
-    SDL_Point points[361];
+    SDL_Point points[370];  // XXX does this need to be even?
 
-    static int32_t sin_table[361];
-    static int32_t cos_table[361];
+    static int32_t sin_table[370];
+    static int32_t cos_table[370];
     static bool first_call = true;
 
     // on first call make table of sin and cos indexed by degrees
     if (first_call) {
-        for (angle = 0; angle <= 360; angle++) {
+        for (angle = 0; angle < 362; angle++) {
             sin_table[angle] = sin(angle*(2*M_PI/360)) * (1<<18);
             cos_table[angle] = cos(angle*(2*M_PI/360)) * (1<<18);
         }
@@ -1264,18 +1266,18 @@ void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_
     // loop over line_width
     for (i = 0; i < line_width; i++) {
         // draw circle, and clip to pane dimensions
-        for (angle = 0; angle <= 360; angle++) {
-            x = pane->x + x_center + (((int64_t)radius * sin_table[angle]) >> 18);
-            y = pane->y + y_center + (((int64_t)radius * cos_table[angle]) >> 18);
-            if (x < pane->x || x >= pane->x+pane->w || y < pane->y || y >= pane->y+pane->h) {
+        for (angle = 0; angle < 362; angle++) {
+            x = x_center + (((int64_t)radius * sin_table[angle]) >> 18);
+            y = y_center + (((int64_t)radius * cos_table[angle]) >> 18);
+            if (x < 0 || x >= pane->w || y < 0 || y >= pane->h) {
                 if (count) {
                     SDL_RenderDrawLines(sdl_renderer, points, count);
                     count = 0;
                 }
                 continue;
             }
-            points[count].x = x;
-            points[count].y = y;
+            points[count].x = pane->x + x;
+            points[count].y = pane->y + y;
             count++;
         }
         if (count) {
