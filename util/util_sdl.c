@@ -997,7 +997,7 @@ sdl_event_t * sdl_poll_event(void)
             // map key to event_id
             if (key < 128) {
                 event_id = key;
-                if (shift) {  // XXX others such as < > 
+                if (shift) {  // XXX other keys, try using a table
                     if (event_id >= 'a' && event_id <= 'z') {
                         event_id = toupper(event_id);
                     } else if (event_id >= '0' && event_id <= '9') {
@@ -1006,6 +1006,10 @@ sdl_event_t * sdl_poll_event(void)
                         event_id = '_';
                     } else if (event_id == '=') {
                         event_id = '+';
+                    } else if (event_id == ',') {
+                        event_id = '<';
+                    } else if (event_id == '.') {
+                        event_id = '>';
                     } else if (event_id == '/') {
                         event_id = '?';
                     }

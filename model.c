@@ -30,6 +30,7 @@
 
 // model time increment
 #define DELTA_T_NS  1L
+#define DELTA_T (1e-9 * DELTA_T_NS)
 
 // show the value of a define
 #define SHOW_DEFINE(x) INFO("define %s = %s\n", #x, SHOW_DEFINE_STR(x))
@@ -44,6 +45,10 @@
 
 // conversion functions  xxx need these in hdr file
 #define METERS_TO_INCHES(m)     ((m) * 39.3701)
+#define NM_TO_METERS(nm)        ((nm) * 1e-9)
+#define METERS_TO_NM(m)         ((m) * 1e9)
+#define NM_TO_MM(nm)            ((nm) * 1e-6)
+#define MM_TO_NM(mm)            ((mm) * 1e6)
 #define AMU_TO_KG(amu)          ((amu) * 1.66054e-27)
 #define MTORR_TO_PASCAL(mtorr)  ((mtorr) * 0.13332237)
 #define UTORR_TO_PASCAL(utorr)  ((utorr) * 0.00013332237)
@@ -53,8 +58,9 @@
 // room temperature
 #define ROOM_TEMPERATURE_KELVIN (F_TO_K(70.0))
 
-// deuterium 
+// deuterium   // XXX or use D AMU
 #define D2_AMU 4.03
+#define D_AMU 2.000  // XXX
 #define D2_KG  AMU_TO_KG(D2_AMU)
 
 // kinetic temperature
@@ -67,6 +73,20 @@
 // http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/idegas.html
 #define NUMBER_OF_MOLECULES(p,v,t)        ((p) * (v) / (k * (t)))
 #define NUMBER_DENSITY_OF_MOLECULES(p,t)  ((p) / (k * (t)))
+
+// Coulomb's Law
+// http://hyperphysics.phy-astr.gsu.edu/hbase/electric/elefor.html
+//    F = ke q1 * q2 / r^2
+#define ke  8.987552e9  // Coulomb's Constant  N m^2 C^-2
+#define COULOMB_FORCE(q1,q2,r)  ((ke * (q1) * (q2)) / ((r) * (r)))
+#define ELECTRON_CHARGE (-1.60217662e-19)   // C
+#define PROTON_CHARGE   (-ELECTRON_CHARGE)  // C
+
+// http://physics.bu.edu/~duffy/PY106/Potential.html
+//  V = ke Q / r
+//  Q = V * r / ke
+// XXX defines  ELECTRIC_POTENTIAL_TO_CHARGE ....
+
 
 // 
 // typedefs
@@ -100,9 +120,10 @@ void * work_thread(void * cx);
 // inline functions
 //
 
+// XXX review
 inline locbox_t * get_locbox(int32_t x_nm, int32_t y_nm, int32_t z_nm)
 {
-    int32_t x_idx = (x_nm + (MAX_LOCBOX*LOCBOX_SIZE_NM/2)) / LOCBOX_SIZE_NM;
+    int32_t x_idx = (x_nm + (MAX_LOCBOX*LOCBOX_SIZE_NM/2)) / LOCBOX_SIZE_NM;  // xxx use >>
     int32_t y_idx = (y_nm + (MAX_LOCBOX*LOCBOX_SIZE_NM/2)) / LOCBOX_SIZE_NM;
     int32_t z_idx = (z_nm + (MAX_LOCBOX*LOCBOX_SIZE_NM/2)) / LOCBOX_SIZE_NM;
     assert(x_idx >= 0 && x_idx < MAX_LOCBOX);
@@ -127,8 +148,9 @@ void model_init_from_params(char * params_str)
     double chamber_diameter_mm, grid_diameter_mm, chamber_pressure_mtorr, grid_voltage_kv, grid_current_ma;
     int32_t x_idx, y_idx, z_idx;
     int32_t x_nm, y_nm, z_nm;
-    int32_t max_worker_threads;
+    double q_grid;
     int64_t num_real_particles_in_locbox;
+    int32_t max_worker_threads;
     pthread_t thread_id;
 
     // don't dump the particles and locbox arrays, because they are so large
@@ -204,6 +226,7 @@ void model_init_from_params(char * params_str)
     DEBUG("max_radius      = %d\n", max_radius);
 
     // init locbox 
+    q_grid = params.grid_voltage_v * NM_TO_METERS(params.grid_radius_nm) / ke;  // XXX macro
     for (x_idx = 0; x_idx < MAX_LOCBOX; x_idx++) {
         for (y_idx = 0; y_idx < MAX_LOCBOX; y_idx++) {
             for (z_idx = 0; z_idx < MAX_LOCBOX; z_idx++) {
@@ -220,6 +243,27 @@ void model_init_from_params(char * params_str)
                 if (lb->radius_idx >= MAX_RADIUS) {
                     FATAL("radius_idx %d too big MAX_RADIUS = %ld\n", lb->radius_idx, MAX_RADIUS);
                 }
+
+                // XXX
+                // COULOMB_FORCE(q1,q2,r)
+                // q_grid = grid_voltage * grid_radius / ke
+                // AMU_TO_KG(D2_AMU)
+
+                if (lb->r_nm > params.grid_radius_nm) {
+                    double f = COULOMB_FORCE(q_grid, PROTON_CHARGE, NM_TO_METERS(lb->r_nm));
+                    double m = AMU_TO_KG(D_AMU);
+                    lb->dxv_nmperdt = -(f / m) * ((double)x_nm / lb->r_nm) * DELTA_T * (1e9 * DELTA_T);
+                    lb->dyv_nmperdt = -(f / m) * ((double)y_nm / lb->r_nm) * DELTA_T * (1e9 * DELTA_T);
+                    lb->dzv_nmperdt = -(f / m) * ((double)z_nm / lb->r_nm) * DELTA_T * (1e9 * DELTA_T);
+                } else {
+                    lb->dxv_nmperdt = 0;
+                    lb->dyv_nmperdt = 0;
+                    lb->dzv_nmperdt = 0;
+                }
+                //if (y_idx == MAX_LOCBOX/2 && z_idx == MAX_LOCBOX/2) {
+                    //INFO("x_nm = %d r_nm = %d  =>  %lf %lf %lf\n",
+                            //x_nm, r_nm, dxv_mpersec, dxv_nmpersec, dxv_nmperdt);
+                //}
             }
         }
     }
@@ -322,7 +366,7 @@ void init_particle(particle_t * p)
     }
 #endif
 
-    // init particle: position and veloicty
+    // position and veloicty
     memset(p,0,sizeof(particle_t));
     p->x_nm = x_nm;
     p->y_nm = y_nm;
@@ -332,10 +376,13 @@ void init_particle(particle_t * p)
     p->zv_nmperdt = zv_nmperdt;
     p->velocity_squared_m2pers2 = (int64_t)roomtemp_velocity_mpers * (int64_t)roomtemp_velocity_mpers;
 
-    // init particle: add to locbox list
+    // XXX
+    p->ion = (lb->radius_idx == 63);
+
+    // add to locbox list
     LIST_INSERT_HEAD(&lb->particle_list_head, p, entries);
 
-    // init particle: updata associated radius info
+    // updata associated radius info
     radius_t * r = &radius[lb->radius_idx];
     r->number_of_atoms++;
     r->sum_velocity_squared_m2pers2 +=  p->velocity_squared_m2pers2;
@@ -463,6 +510,13 @@ void * work_thread(void * cx)
                 // if the particle has already been processed then continue
                 if (p->last_processed_time_ns == time_ns) {
                     continue;
+                }
+
+                // XXX velocity
+                if (p->ion) {
+                    p->xv_nmperdt += lb->dxv_nmperdt;
+                    p->yv_nmperdt += lb->dyv_nmperdt;
+                    p->zv_nmperdt += lb->dzv_nmperdt;
                 }
 
                 // update the particle's position, and 

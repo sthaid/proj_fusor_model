@@ -13,6 +13,7 @@
 #include <assert.h>
 
 #include <pthread.h>
+#include <math.h>
 
 #include "model.h"
 #include "util_sdl.h"
@@ -20,21 +21,23 @@
 
 #if 0 // XXX TODO
 HIGH
+- display temperature graph, and test by setting the shell to high temperature
+- ways to increase performance, such as skipping locboxs that dont have ions, for a bit
 - add a control to adjust the pancake height, and center the pancake 
 - model the ionization rate, and dipslay graph of the result
-- display temperature graph, and test by setting the shell to high temperature
-- when zoomed in then display the locbox grid
-- xy xz yz
 - display performance metric
-- ways to increase performance, such as skipping locboxs that dont have ions, for a bit
-- add electric force to locbox, and test by creating some ions,  say 1 percent
 - use memory mapped file, OR try periodically writing the file
-- add controls to start and stop the model
-- use a scale table, with factor the eighth root of 2
 MEDIUM
 - change param values by left or right click OR mouse wheel
+- use a scale table, with factor the eighth root of 2
 LOW
 - try using SDL_RenderSetLogicalSize
+
+DONE
+- xy xz yz
+- add electric force to locbox, and test by creating some ions,  say 1 percent
+- add controls to start and stop the model
+- when zoomed in then display the locbox grid
 #endif
 
 //
@@ -156,12 +159,36 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
 {
     #define SDL_EVENT_MOUSE_MOTION (SDL_EVENT_USER_DEFINED+0)
     #define SDL_EVENT_MOUSE_WHEEL  (SDL_EVENT_USER_DEFINED+1)
+    #define SDL_EVENT_DISP_SELECT  (SDL_EVENT_USER_DEFINED+2)
+    #define SDL_EVENT_STATE_SELECT (SDL_EVENT_USER_DEFINED+3)
+    #define SDL_EVENT_GRID_SELECT  (SDL_EVENT_USER_DEFINED+4)
+
+    #define STATE_RUNNING 0
+    #define STATE_STOPPED 1
+    #define STATE_STR \
+        (vars->state == STATE_RUNNING ? "RUNNING" : vars->state == STATE_STOPPED ? "STOPPED" : "??")
+
+    #define GRID_OFF 0
+    #define GRID_ON  1
+    #define GRID_STR \
+        "GRID"  // xxx GRID_ON or GRID_OFF  ????
+
+    #define DISP_XY 0
+    #define DISP_XZ 1
+    #define DISP_YZ 2
+    #define DISP_STR \
+        (vars->disp == DISP_XY ? "XY" : vars->disp == DISP_XZ ? "XZ" : vars->disp == DISP_YZ ? "YZ"  : "??")
+
+    #define NM_PER_PIXEL (vars->width_nm / pane->w)
 
     struct {
         int64_t x_offset_nm;
         int64_t y_offset_nm;
         int64_t width_nm;
         int64_t updates;  // xxx
+        int64_t state;  // xxx bool or enum
+        int64_t grid;  // xxx bool
+        int64_t disp;   // xxx enum
     } * vars = pane_cx->vars;
     rect_t * pane = &pane_cx->pane;
 
@@ -175,6 +202,9 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         vars->y_offset_nm = 0;
         vars->width_nm = params.chamber_radius_nm * 2;
         vars->updates = 0;
+        vars->state = STATE_RUNNING;   // xxx maybe should query the model
+        vars->grid = GRID_OFF;
+        vars->disp = DISP_XY;
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -183,30 +213,44 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
+
+        // render the points; use vars->disp to select the orientation
+        {
         #define MAX_POINTS 1000
         #define POINT_SIZE 1
         #define ATOM_COLOR BLUE
         #define ION_COLOR  RED
 
-        rect_t      locf = {0,0,pane->w,pane->h};
-        int64_t      x_offset_nm = vars->x_offset_nm;
-        int64_t      y_offset_nm = vars->y_offset_nm;
-        int64_t      nm_per_pixel = vars->width_nm / pane->w;
-        int32_t      x_idx, y_idx, x, y;
+        int32_t      idx1, idx2, x, y;
         particle_t * p;
         locbox_t   * lb;
         point_t      points_atom[MAX_POINTS];
         point_t      points_ion[MAX_POINTS];
         int32_t      max_points_atom = 0, max_points_ion = 0;
 
-        for (x_idx = 0; x_idx < MAX_LOCBOX; x_idx++) {
-            for (y_idx = 0; y_idx < MAX_LOCBOX; y_idx++) {
-                lb = &locbox[x_idx][y_idx][MAX_LOCBOX/2];
+        for (idx1 = 0; idx1 < MAX_LOCBOX; idx1++) {
+            for (idx2 = 0; idx2 < MAX_LOCBOX; idx2++) {
+
+                lb = (vars->disp == DISP_XY ? &locbox[idx1][idx2][MAX_LOCBOX/2] :
+                      vars->disp == DISP_XZ ? &locbox[idx1][MAX_LOCBOX/2][idx2] :
+                                              &locbox[MAX_LOCBOX/2][idx1][idx2]);
+
                 pthread_spin_lock(&lb->particle_list_spinlock);
                 LIST_FOREACH(p, &lb->particle_list_head, entries) {
-                    assert(p->z_nm >= 0 && p->z_nm < LOCBOX_SIZE_MM*1000000);
-                    x = pane->w/2 + (p->x_nm + x_offset_nm) / nm_per_pixel; 
-                    y = pane->h/2 + (p->y_nm + y_offset_nm) / nm_per_pixel;
+                    if (vars->disp == DISP_XY) {
+                        x = pane->w/2 + (p->x_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
+                        y = pane->h/2 + (p->y_nm + vars->y_offset_nm) / NM_PER_PIXEL;
+                        assert(p->z_nm >= 0 && p->z_nm < LOCBOX_SIZE_NM);
+                    } else if (vars->disp == DISP_XZ) {
+                        x = pane->w/2 + (p->x_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
+                        y = pane->h/2 + (p->z_nm + vars->y_offset_nm) / NM_PER_PIXEL;
+                        assert(p->y_nm >= 0 && p->y_nm < LOCBOX_SIZE_NM);
+                    } else {  // vars->disp == YZ
+                        x = pane->w/2 + (p->y_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
+                        y = pane->h/2 + (p->z_nm + vars->y_offset_nm) / NM_PER_PIXEL;
+                        assert(p->x_nm >= 0 && p->x_nm < LOCBOX_SIZE_NM);
+                    }
+
                     if (!p->ion) {
                         points_atom[max_points_atom].x = x;
                         points_atom[max_points_atom].y = y;
@@ -236,27 +280,72 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
             sdl_render_points(pane, points_ion, max_points_ion, ION_COLOR, POINT_SIZE);
             max_points_ion = 0;
         }
+        }
+
+        // render the grid
+        {
+        int64_t x_nm, y_nm, tmp_nm, r_nm = params.chamber_radius_nm;
+        int64_t x, y_min, y_max;
+        int64_t y, x_min, x_max;
+        if (vars->grid == GRID_ON) {
+            for (x_nm = -r_nm; x_nm <= r_nm; x_nm += LOCBOX_SIZE_NM) {
+                x = pane->w/2 + (x_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
+                tmp_nm = r_nm*r_nm - x_nm*x_nm;
+                if (tmp_nm < 0) continue;
+                tmp_nm = sqrt(tmp_nm);
+                y_min = pane->h/2 + (vars->y_offset_nm - tmp_nm) / NM_PER_PIXEL;
+                y_max = pane->h/2 + (vars->y_offset_nm + tmp_nm) / NM_PER_PIXEL;
+                if (y_min < 0) y_min = 0;
+                if (y_max > pane->h-1) y_max = pane->h-1;
+                sdl_render_line(pane, x, y_min, x, y_max, GRAY);
+            }
+            for (y_nm = -r_nm; y_nm <= r_nm; y_nm += LOCBOX_SIZE_NM) {
+                y = pane->h/2 + (y_nm + vars->y_offset_nm) / NM_PER_PIXEL; 
+                tmp_nm = r_nm*r_nm - y_nm*y_nm;
+                if (tmp_nm < 0) continue;
+                tmp_nm = sqrt(tmp_nm);
+                x_min = pane->w/2 + (vars->x_offset_nm - tmp_nm) / NM_PER_PIXEL;
+                x_max = pane->w/2 + (vars->x_offset_nm + tmp_nm) / NM_PER_PIXEL;
+                if (x_min < 0) x_min = 0;
+                if (x_max > pane->w-1) x_max = pane->w-1;
+                sdl_render_line(pane, x_min, y, x_max, y, GRAY);
+            }
+        }
+        }
+
+        // render the chamber and grid
+        {
+        sdl_render_circle(pane, 
+                          pane->w/2 + vars->x_offset_nm / NM_PER_PIXEL,
+                          pane->h/2 + vars->y_offset_nm / NM_PER_PIXEL,
+                          params.chamber_radius_nm / NM_PER_PIXEL, 2, WHITE);
 
         sdl_render_circle(pane, 
-                          pane->w/2 + x_offset_nm / nm_per_pixel,
-                          pane->h/2 + y_offset_nm / nm_per_pixel,
-                          params.chamber_radius_nm / nm_per_pixel, 2, WHITE);
+                          pane->w/2 + vars->x_offset_nm / NM_PER_PIXEL,
+                          pane->h/2 + vars->y_offset_nm / NM_PER_PIXEL,
+                          params.grid_radius_nm / NM_PER_PIXEL, 2, WHITE);
+        }
 
-        sdl_render_circle(pane, 
-                          pane->w/2 + x_offset_nm / nm_per_pixel,
-                          pane->h/2 + y_offset_nm / nm_per_pixel,
-                          params.grid_radius_nm / nm_per_pixel, 2, WHITE);
+        // render the controls and status
+        {
+        rect_t  locf = {0,0,pane->w,pane->h};
+        sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_TYPE_MOUSE_MOTION, pane_cx);
+        sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
-        vars->updates++;
+        sdl_render_printf(pane, 0, -9, 0, WHITE, BLACK, 
+            "%9ld", ++vars->updates);
+
         sdl_render_printf(pane, 0, 0, 0, WHITE, BLACK, 
             "T = %.3lf us", time_ns/1000.);
         sdl_render_printf(pane, 1, 0, 0, WHITE, BLACK, 
-            "W = %ld mm", vars->width_nm/1000000);
-        sdl_render_printf(pane, 0, -9, 0, WHITE, BLACK, 
-            "%9ld", vars->updates);
-
-        sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_TYPE_MOUSE_MOTION, pane_cx);
-        sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
+            "W = %ld mm", vars->width_nm/1000000);  // xxx conversion macro
+        sdl_render_text_and_register_event(pane, 2, 0, 0, STATE_STR, LIGHT_BLUE, BLACK, 
+            SDL_EVENT_STATE_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        sdl_render_text_and_register_event(pane, 3, 0, 0, GRID_STR, LIGHT_BLUE, BLACK, 
+            SDL_EVENT_GRID_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        sdl_render_text_and_register_event(pane, 4, 0, 0, DISP_STR, LIGHT_BLUE, BLACK, 
+            SDL_EVENT_DISP_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        }
 
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -268,16 +357,30 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch(event->event_id) {
         case SDL_EVENT_MOUSE_MOTION: {
-            int64_t nm_per_pixel = vars->width_nm / pane->w;
-            vars->x_offset_nm += event->mouse_motion.delta_x * nm_per_pixel;
-            vars->y_offset_nm += event->mouse_motion.delta_y * nm_per_pixel;
+            vars->x_offset_nm += event->mouse_motion.delta_x * NM_PER_PIXEL;
+            vars->y_offset_nm += event->mouse_motion.delta_y * NM_PER_PIXEL;
             return PANE_HANDLER_RET_DISPLAY_REDRAW; }
         case SDL_EVENT_MOUSE_WHEEL:
             if (event->mouse_wheel.delta_y > 0) {
-                vars->width_nm *= 1.1;
-            } else if (event->mouse_wheel.delta_y < 0) {
                 vars->width_nm /= 1.1;
+            } else if (event->mouse_wheel.delta_y < 0) {
+                vars->width_nm *= 1.1;
             }
+            return PANE_HANDLER_RET_DISPLAY_REDRAW;
+        case SDL_EVENT_DISP_SELECT:
+            vars->disp = (vars->disp + 1) % 3;
+            return PANE_HANDLER_RET_DISPLAY_REDRAW;
+        case SDL_EVENT_STATE_SELECT:
+            if (vars->state == STATE_RUNNING) {
+                vars->state = STATE_STOPPED;
+                model_stop();
+            } else {   // vars->state == STATE_STOPPED
+                vars->state = STATE_RUNNING;
+                model_start();
+            }
+            return PANE_HANDLER_RET_DISPLAY_REDRAW;
+        case SDL_EVENT_GRID_SELECT:
+            vars->grid = (vars->grid == GRID_ON ? GRID_OFF : GRID_ON);
             return PANE_HANDLER_RET_DISPLAY_REDRAW;
         }
         return PANE_HANDLER_RET_NO_ACTION;
@@ -320,9 +423,9 @@ static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * in
 
     if (request == PANE_HANDLER_REQ_RENDER) {
         sdl_render_printf(pane, 0, 0, 0, WHITE, BLACK, 
-            "ChamberDiameter = %d mm", params.chamber_radius_nm*2/1000000);
+            "ChamberDiameter = %d mm", params.chamber_radius_nm*2/1000000);  // xxx conversion macro
         sdl_render_printf(pane, 1, 0, 0, WHITE, BLACK, 
-            "GridDiameter    = %d mm", params.grid_radius_nm*2/1000000);
+            "GridDiameter    = %d mm", params.grid_radius_nm*2/1000000);  // xxx conversion macro
         sdl_render_printf(pane, 2, 0, 0, WHITE, BLACK, 
             "ChamberPressure = %.1lf mTorr", params.chamber_pressure_utorr/1000.);
         sdl_render_printf(pane, 3, 0, 0, WHITE, BLACK, 
