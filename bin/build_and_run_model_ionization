@@ -1,0 +1,10 @@
+
+gcc -g -O2 -Wall -Iutil -DUNIT_TEST -lm -o ut model_ionization.c util/util_misc.c
+if [ $? -ne 0 ]; then
+  echo ERROR
+  exit
+fi
+
+sleep 1
+
+./ut 

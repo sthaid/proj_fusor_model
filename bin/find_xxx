@@ -1,0 +1,5 @@
+#!/bin/bash
+
+find . ! \( -path "./save/*" -o -path "./old/*" \) \
+     \( -name "*.[ch]" -o -name Makefile \) \
+     -exec grep -Hi XXX {} \;

@@ -1,10 +1,11 @@
 TARGETS = model
 
-# XXX -Wno-unused-variable
-
 CC = gcc
 OUTPUT_OPTION=-MMD -MP -o $@
-CFLAGS = -g -O2 -pthread -mcmodel=medium -Wall -Iutil $(shell sdl2-config --cflags) 
+# CFLAGS_PROFILING = -pg
+CFLAGS_SDL2 = $(shell sdl2-config --cflags)
+CFLAGS = -g -O2 -mcmodel=medium -Wall -Iutil \
+         $(CFLAGS_PROFILING) $(CFLAGS_SDL2)
 
 SRC_MODEL = main.c \
             model.c \
@@ -24,7 +25,7 @@ DEP=$(SRC_MODEL:.c=.d)
 all: $(TARGETS)
 
 model: $(OBJ_MODEL) 
-	$(CC) -pthread -lrt -lm -lpng -ljpeg -lSDL2 -lSDL2_ttf -lSDL2_mixer \
+	$(CC) -pthread -lrt -lm -lpng -ljpeg -lSDL2 -lSDL2_ttf -lSDL2_mixer $(CFLAGS_PROFILING) \
               -o $@ $(OBJ_MODEL)
 
 -include $(DEP)
@@ -34,5 +35,5 @@ model: $(OBJ_MODEL)
 #
 
 clean:
-	rm -f $(TARGETS) $(OBJ_MODEL)$(DEP)
+	rm -f $(TARGETS) $(OBJ_MODEL)$(DEP) gmon.out
 

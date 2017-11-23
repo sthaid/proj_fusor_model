@@ -28,7 +28,7 @@
 #define MAX_GRID_DIAMETER_MM(chdia)   ((chdia) * 3L / 4L) 
 #define MIN_CHAMBER_PRESSURE_MTORR    1L
 #define MAX_CHAMBER_PRESSURE_MTORR    1000L
-#define MAX_GRID_VOLTAGE_KV           100L
+#define MAX_GRID_VOLTAGE_KV           -100L
 #define MAX_GRID_CURRENT_MA           1000L
 
 // locbox
@@ -39,11 +39,11 @@
  // XXX ^^^ should this be even number
 
 // radius
-#define RADIUS_SHELL_SIZE_MM          1L   // must be >= LOCBOX_SIZE_MM
-#define MAX_RADIUS                    (300L / RADIUS_SHELL_SIZE_MM)
+#define RADIUS_SHELL_SIZE_MM          1L   // must be >= LOCBOX_SIZE_MM   XXX why?
+#define MAX_RADIUS                    (300L / RADIUS_SHELL_SIZE_MM)  // XXX 300?
 
 // particles
-#define AVERAGE_PARTICLES_PER_LOCBOX  1L  // XXX was 10L
+#define AVERAGE_PARTICLES_PER_LOCBOX  10L  // XXX was 10L
 #define MAX_CHAMBER_VOLUME_CU_MM      (CUBED(MAX_CHAMBER_DIAMETER_MM/2) * 4L * 3141593L / 3000000L) 
 #define MAX_PARTICLES                 (MAX_CHAMBER_VOLUME_CU_MM / LOCBOX_VOLUME_CU_MM * AVERAGE_PARTICLES_PER_LOCBOX)
 
@@ -61,25 +61,23 @@ typedef struct {
 
 typedef struct particle_s {
     LIST_ENTRY(particle_s) entries;
-    int64_t last_processed_time_ns;
     int32_t x_nm;
     int32_t y_nm;
     int32_t z_nm;
-    int32_t xv_nmperdt;
-    int32_t yv_nmperdt;
-    int32_t zv_nmperdt;
+    int32_t xv_nmperns;
+    int32_t yv_nmperns;
+    int32_t zv_nmperns;
     int64_t velocity_squared_m2pers2;
     bool    ion;
 } particle_t;
 
 typedef struct locbox_s {
     LIST_HEAD(head_s, particle_s) particle_list_head;
-    pthread_spinlock_t particle_list_spinlock;
     int32_t radius_idx;
     int32_t r_nm;
-    int32_t dxv_nmperdt;
-    int32_t dyv_nmperdt;
-    int32_t dzv_nmperdt;
+    int32_t xa_nmperns2;
+    int32_t ya_nmperns2;
+    int32_t za_nmperns2;
 } locbox_t;
 
 typedef struct {

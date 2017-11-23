@@ -27,6 +27,18 @@ SOFTWARE.
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+// -----------------  GENERAL  -----------------------------------
+
+// show the value of a define
+#define SHOW_DEFINE(x) INFO("define %s = %s\n", #x, SHOW_DEFINE_STR(x))
+#define SHOW_DEFINE_STR(x) #x
+
+// for use in call to madvise XXX comment
+#define PAGE_SIZE 4096L
+#define ROUND_UP(x,n) (((uint64_t)(x) + ((uint64_t)(n) - 1)) & ~((uint64_t)(n) - 1))  // XXX pwr 2
+
+// XXX use of int32_t vs int  in this directory
+
 // -----------------  LOGGING  -----------------------------------
 
 #define ENABLE_LOGGING_AT_DEBUG_LEVEL
@@ -52,6 +64,11 @@ SOFTWARE.
 #else
     #define DEBUG(fmt, args...) 
 #endif
+
+#define BLANK_LINE \
+    do { \
+        logmsg("", "", "blankline"); \
+    } while (0)
 
 #define FATAL(fmt, args...) \
     do { \
@@ -90,6 +107,10 @@ int do_send(int sockfd, void * send_buff, size_t len);
 
 // -----------------  RANDOM NUMBERS  ------------------------------------
 
-inline int32_t random_range(int32_t min, int32_t max);
+int32_t random_range(int32_t min, int32_t max);
+
+// -----------------  QUADRATIC EQUATION  --------------------------------
+
+bool solve_quadratic_equation(double a, double b, double c, double *x1, double *x2);
 
 #endif

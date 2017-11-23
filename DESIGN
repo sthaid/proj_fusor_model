@@ -1,3 +1,37 @@
+find script for xxx issues
+
+recompile all programs
+- make a script to compile the test programs
+
+get rid of the random range cache
+
+do something about profiling, in the Makefile
+
+xxx issues in all files
+
+---------------------
+
+Born approximation calculations by Bates and Dalgarno
+
+https://books.google.com/books?id=lACtfPidiLQC&pg=PA32&lpg=PA32&dq=Born+approximation+calculations+by+Bates+and+Dalgarno&source=bl&ots=SRuvf24izc&sig=poIhU7kCY-xQnWxofJjGS1tbtQM&hl=en&sa=X&ved=0ahUKEwjitI_41s_XAhVl7IMKHdvcDcoQ6AEIKDAA#v=onepage&q=Born%20approximation%20calculations%20by%20Bates%20and%20Dalgarno&f=false
+
+
+------------------
+
+hydrogen ionization in proton collision
+
+The cross sections for charge transfer and for ionization in 
+collisions between protons and hydrogen atoms have been determined 
+over the energy range from 400 to 40 000 ev. ... the energy range 
+of the experiments up to 40000 ev.
+
+Ionization and Charge Transfer in Proton-Hydrogen Atom Collisions
+
+link.aps.org/pdf/10.1103/PhysRev.119.663
+
+
+--------------------
+
 TODO
 - threads in model.c
 - test creating random ions and accelerate them towards the grid

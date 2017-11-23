@@ -1,0 +1,72 @@
+======================
+Makefiles
+======================
+
+https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html
+
+
+======================
+Commands
+======================
+
+coredumpctl gdb
+  
+gprof -l -b model gmon.out    # use -pg in Makefile
+
+git ls-tree -r master --name-only
+
+
+======================
+Util SDL Pane Templete
+======================
+
+static int32_t pane_handler_xxx(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) 
+{
+    struct {
+    } * vars = pane_cx->vars;
+    rect_t * pane = &pane_cx->pane;
+
+    // ----------------------------
+    // -------- INITIALIZE --------
+    // ----------------------------
+
+    if (request == PANE_HANDLER_REQ_INITIALIZE) {
+        vars = pane_cx->vars = calloc(1,sizeof(*vars));
+        xxx
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // ------------------------
+    // -------- RENDER --------
+    // ------------------------
+
+    if (request == PANE_HANDLER_REQ_RENDER) {
+        xxx
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // -----------------------
+    // -------- EVENT --------
+    // -----------------------
+
+    if (request == PANE_HANDLER_REQ_EVENT) {
+        switch(event->event_id) {
+        case SDL_EVENT_xxx
+            return PANE_HANDLER_RET_DISPLAY_REDRAW;
+        }
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // ---------------------------
+    // -------- TERMINATE --------
+    // ---------------------------
+
+    if (request == PANE_HANDLER_REQ_TERMINATE) {
+        free(vars);
+        return PANE_HANDLER_RET_NO_ACTION;
+    }
+
+    // not reached
+    assert(0);
+    return PANE_HANDLER_RET_NO_ACTION;
+}

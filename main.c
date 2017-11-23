@@ -21,10 +21,11 @@
 
 #if 0 // XXX TODO
 HIGH
+- model the ionization rate, and dipslay graph of the result
+- add predefined graphing pane to sdl2
 - display temperature graph, and test by setting the shell to high temperature
 - ways to increase performance, such as skipping locboxs that dont have ions, for a bit
 - add a control to adjust the pancake height, and center the pancake 
-- model the ionization rate, and dipslay graph of the result
 - display performance metric
 - use memory mapped file, OR try periodically writing the file
 MEDIUM
@@ -68,7 +69,7 @@ static bool display_redraw_needed(uint64_t time_render_us);  // xxx make this op
 
 int main(int argc, char **argv)
 {
-    static char default_params_str[] = "150,38,15,30,5";
+    static char default_params_str[] = "150,38,15,-30,5";
     char * params_str = NULL;
     char * filename_str = NULL;
     int32_t win_width, win_height; 
@@ -235,7 +236,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
                       vars->disp == DISP_XZ ? &locbox[idx1][MAX_LOCBOX/2][idx2] :
                                               &locbox[MAX_LOCBOX/2][idx1][idx2]);
 
-                pthread_spin_lock(&lb->particle_list_spinlock);
+                //xxx pthread_spin_lock(&lb->particle_list_spinlock);
                 LIST_FOREACH(p, &lb->particle_list_head, entries) {
                     if (vars->disp == DISP_XY) {
                         x = pane->w/2 + (p->x_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
@@ -269,7 +270,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
                         }
                     }
                 }
-                pthread_spin_unlock(&lb->particle_list_spinlock);
+                //xxx pthread_spin_unlock(&lb->particle_list_spinlock);
             }
         }
         if (max_points_atom > 0) {

@@ -35,11 +35,11 @@ SOFTWARE.
 #include <assert.h>
 
 #include <inttypes.h>
-
 #include <sys/time.h>
 #include <time.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <math.h>
 
 #include "util_misc.h"
 
@@ -51,6 +51,12 @@ void logmsg(char *lvl, const char *func, char *fmt, ...)
     char    msg[1000];
     int     len;
     char    time_str[MAX_TIME_STR];
+
+    // handle request to print a blank line
+    if (lvl[0] == '\0') {
+        fprintf(stderr, "\n");
+        return;
+    }
 
     // construct msg
     va_start(ap, fmt);
@@ -301,9 +307,24 @@ int do_send(int sockfd, void * send_buff, size_t len)
 
 // -----------------  RANDOM NUMBERS  ------------------------------------
 
-inline int32_t random_range(int32_t min, int32_t max)
+int32_t random_range(int32_t min, int32_t max)
 {
     int64_t extent = (int64_t)max - min + 1L;
     return random() * extent / (RAND_MAX+1L) + min;
 }
 
+// -----------------  QUADRATIC EQUATION  --------------------------------
+
+bool solve_quadratic_equation(double a, double b, double c, double *x1, double *x2)
+{
+    double discriminant, temp;
+
+    discriminant = b*b - 4*a*c;
+    if (discriminant < 0) {
+        return false;
+    }
+    temp = sqrt(discriminant);
+    *x1 = (-b + temp) / (2*a);
+    *x2 = (-b - temp) / (2*a);
+    return true;
+}
