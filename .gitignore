@@ -3,4 +3,7 @@
 *.swp
 model
 sdltest
+benchmark_math
+benchmark_rrc
+mean_free_path
 gmon.out

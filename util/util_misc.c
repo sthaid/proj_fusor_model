@@ -313,7 +313,40 @@ int32_t random_range(int32_t min, int32_t max)
     return random() * extent / (RAND_MAX+1L) + min;
 }
 
-// -----------------  QUADRATIC EQUATION  --------------------------------
+void random_vector(int32_t magnitude, int32_t * xarg, int32_t * yarg, int32_t * zarg)
+{
+    int32_t x, y, z, r;
+
+    // this routine returns a vector whose length equals 'magnitude' and
+    // with a random direction
+
+    // xxx comment
+    while (true) {
+        x = random() - RAND_MAX/2;
+        y = random() - RAND_MAX/2;
+        z = random() - RAND_MAX/2;
+        r = hypotenuse(x,y,z); 
+        if (r > RAND_MAX/10 && r < RAND_MAX/2) {
+            break;
+        }
+    }
+
+    // xxx comment
+    *xarg = (int64_t)x * magnitude / r;
+    *yarg = (int64_t)y * magnitude / r;
+    *zarg = (int64_t)z * magnitude / r;
+
+#if 0
+    // verification
+    int32_t magnitude_check = hypotenuse(*xarg, *yarg, *zarg);
+    if (abs(magnitude_check-magnitude) > 2) {
+        FATAL("magnitude=%d magnitude_check=%d, xyz=%d %d %d\n",
+              magnitude, magnitude_check, *xarg, *yarg, *zarg);
+    }
+#endif
+}
+
+// -----------------  MATH  ----------------------------------------------
 
 bool solve_quadratic_equation(double a, double b, double c, double *x1, double *x2)
 {
@@ -328,3 +361,12 @@ bool solve_quadratic_equation(double a, double b, double c, double *x1, double *
     *x2 = (-b - temp) / (2*a);
     return true;
 }
+
+int32_t hypotenuse(int32_t x, int32_t y, int32_t z)
+{
+    int64_t hypotenuse_squared = (int64_t)x * (int64_t)x +
+                                 (int64_t)y * (int64_t)y +
+                                 (int64_t)z * (int64_t)z;
+    return sqrt(hypotenuse_squared);
+}
+

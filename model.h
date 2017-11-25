@@ -1,15 +1,8 @@
 #ifndef __MODEL_H__
 #define __MODEL_H__
 
-//
 // XXX 
-// - review use of int64 vs 32
-// - check the size of the data allocations
-// - CUBED eval once
-// - should the defines really be longs
 // - should chamber pressure param be pascals
-// - num_real_particles_per_virtual_particle may be better as double
-//
 
 #include <sys/queue.h>
 
@@ -22,34 +15,36 @@
 #define CUBED(x) ((x) * (x) * (x))
 
 // params range
-#define MIN_CHAMBER_DIAMETER_MM       100L    // 3.93 inches
-#define MAX_CHAMBER_DIAMETER_MM       200L    // 7.87 inches
-#define MIN_GRID_DIAMETER_MM          10L     // 0.39 inches
-#define MAX_GRID_DIAMETER_MM(chdia)   ((chdia) * 3L / 4L) 
-#define MIN_CHAMBER_PRESSURE_MTORR    1L
-#define MAX_CHAMBER_PRESSURE_MTORR    1000L
-#define MAX_GRID_VOLTAGE_KV           -100L
-#define MAX_GRID_CURRENT_MA           1000L
+#define MIN_CHAMBER_DIAMETER_MM     100    // 3.93 inches
+#define MAX_CHAMBER_DIAMETER_MM     200    // 7.87 inches
+#define MIN_GRID_DIAMETER_MM        10     // 0.39 inches
+#define MAX_GRID_DIAMETER_MM(chdia) ((chdia) * 3 / 4) 
+#define MIN_CHAMBER_PRESSURE_MTORR  1
+#define MAX_CHAMBER_PRESSURE_MTORR  1000
+#define MAX_GRID_VOLTAGE_KV         -100
+#define MAX_GRID_CURRENT_MA         1000
 
-// locbox
-#define LOCBOX_SIZE_MM                1L
-#define LOCBOX_SIZE_NM                (LOCBOX_SIZE_MM * 1000000L)
-#define LOCBOX_VOLUME_CU_MM           CUBED(LOCBOX_SIZE_MM)
-#define MAX_LOCBOX                    ((MAX_CHAMBER_DIAMETER_MM + 10L) / LOCBOX_SIZE_MM)
- // XXX ^^^ should this be even number
+// cell
+#define CELL_SIZE_MM                1
+#define CELL_SIZE_NM                (CELL_SIZE_MM * 1000000)
+#define CELL_VOLUME_CU_MM           CUBED(CELL_SIZE_MM)
+#define MAX_CELL                    (MAX_CHAMBER_DIAMETER_MM / CELL_SIZE_MM)
 
-// radius
-#define RADIUS_SHELL_SIZE_MM          1L   // must be >= LOCBOX_SIZE_MM   XXX why?
-#define MAX_RADIUS                    (300L / RADIUS_SHELL_SIZE_MM)  // XXX 300?
+// shell
+#define SHELL_SIZE_MM               1
+#define SHELL_SIZE_NM               (SHELL_SIZE_MM * 1000000)
+#define MAX_SHELL                   (MAX_CHAMBER_DIAMETER_MM / 2 / SHELL_SIZE_MM)
 
 // particles
-#define AVERAGE_PARTICLES_PER_LOCBOX  10L  // XXX was 10L
-#define MAX_CHAMBER_VOLUME_CU_MM      (CUBED(MAX_CHAMBER_DIAMETER_MM/2) * 4L * 3141593L / 3000000L) 
-#define MAX_PARTICLES                 (MAX_CHAMBER_VOLUME_CU_MM / LOCBOX_VOLUME_CU_MM * AVERAGE_PARTICLES_PER_LOCBOX)
+#define AVG_SIM_PARTICLES_PER_CELL  10
+#define MAX_CHAMBER_VOLUME_CU_MM    ((int32_t)(CUBED(MAX_CHAMBER_DIAMETER_MM/2) * 4L * 3141593 / 3000000))
+#define MAX_PARTICLES               (MAX_CHAMBER_VOLUME_CU_MM / CELL_VOLUME_CU_MM * AVG_SIM_PARTICLES_PER_CELL)
 
 //
 // TYPEDEFS
 //
+
+struct shell_s;
 
 typedef struct {
     int32_t chamber_radius_nm;
@@ -71,24 +66,25 @@ typedef struct particle_s {
     bool    ion;
 } particle_t;
 
-typedef struct locbox_s {
+typedef struct cell_s {
     LIST_HEAD(head_s, particle_s) particle_list_head;
-    int32_t radius_idx;
+    struct shell_s * shell;
     int32_t r_nm;
     int32_t xa_nmperns2;
     int32_t ya_nmperns2;
     int32_t za_nmperns2;
-} locbox_t;
+} cell_t;
 
-typedef struct {
-    int64_t volume_cu_mm;
-    int64_t number_of_atoms;
-    int64_t number_of_ions;
+typedef struct shell_s {
+    int32_t volume_cu_mm;
+    int32_t number_of_atoms;
+    int32_t number_of_ions;
     int64_t ionization_event_count;
     int64_t recombination_event_count;
     int64_t fusion_event_count;
     int64_t sum_velocity_squared_m2pers2;
-} radius_t;
+    // XXX add list of cells
+} shell_t;
 
 //
 // VARIABLES
@@ -99,13 +95,14 @@ params_t     params;
 particle_t   particles[MAX_PARTICLES];
 int32_t      max_particles;
 
-radius_t     radius[MAX_RADIUS];
-int32_t      max_radius;
+shell_t      shell[MAX_SHELL];
+int32_t      max_shell;
 
-locbox_t     locbox[MAX_LOCBOX][MAX_LOCBOX][MAX_LOCBOX];
+cell_t       cell[MAX_CELL][MAX_CELL][MAX_CELL];
+
+double       num_real_particles_per_sim_particle;
 
 int64_t      time_ns;
-int64_t      num_real_particles_per_virtual_particle;
 
 //
 // PROTOTYPES

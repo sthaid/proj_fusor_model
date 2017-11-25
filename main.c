@@ -24,7 +24,7 @@ HIGH
 - model the ionization rate, and dipslay graph of the result
 - add predefined graphing pane to sdl2
 - display temperature graph, and test by setting the shell to high temperature
-- ways to increase performance, such as skipping locboxs that dont have ions, for a bit
+- ways to increase performance, such as skipping cells that dont have ions, for a bit
 - add a control to adjust the pancake height, and center the pancake 
 - display performance metric
 - use memory mapped file, OR try periodically writing the file
@@ -36,9 +36,9 @@ LOW
 
 DONE
 - xy xz yz
-- add electric force to locbox, and test by creating some ions,  say 1 percent
+- add electric force to cell, and test by creating some ions,  say 1 percent
 - add controls to start and stop the model
-- when zoomed in then display the locbox grid
+- when zoomed in then display the cell grid
 #endif
 
 //
@@ -224,32 +224,31 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
 
         int32_t      idx1, idx2, x, y;
         particle_t * p;
-        locbox_t   * lb;
+        cell_t   *   c;
         point_t      points_atom[MAX_POINTS];
         point_t      points_ion[MAX_POINTS];
         int32_t      max_points_atom = 0, max_points_ion = 0;
 
-        for (idx1 = 0; idx1 < MAX_LOCBOX; idx1++) {
-            for (idx2 = 0; idx2 < MAX_LOCBOX; idx2++) {
+        for (idx1 = 0; idx1 < MAX_CELL; idx1++) {
+            for (idx2 = 0; idx2 < MAX_CELL; idx2++) {
 
-                lb = (vars->disp == DISP_XY ? &locbox[idx1][idx2][MAX_LOCBOX/2] :
-                      vars->disp == DISP_XZ ? &locbox[idx1][MAX_LOCBOX/2][idx2] :
-                                              &locbox[MAX_LOCBOX/2][idx1][idx2]);
+                c = (vars->disp == DISP_XY ? &cell[idx1][idx2][MAX_CELL/2] :
+                     vars->disp == DISP_XZ ? &cell[idx1][MAX_CELL/2][idx2] :
+                                             &cell[MAX_CELL/2][idx1][idx2]);
 
-                //xxx pthread_spin_lock(&lb->particle_list_spinlock);
-                LIST_FOREACH(p, &lb->particle_list_head, entries) {
+                LIST_FOREACH(p, &c->particle_list_head, entries) {
                     if (vars->disp == DISP_XY) {
                         x = pane->w/2 + (p->x_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
                         y = pane->h/2 + (p->y_nm + vars->y_offset_nm) / NM_PER_PIXEL;
-                        assert(p->z_nm >= 0 && p->z_nm < LOCBOX_SIZE_NM);
+                        assert(p->z_nm >= 0 && p->z_nm < CELL_SIZE_NM);
                     } else if (vars->disp == DISP_XZ) {
                         x = pane->w/2 + (p->x_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
                         y = pane->h/2 + (p->z_nm + vars->y_offset_nm) / NM_PER_PIXEL;
-                        assert(p->y_nm >= 0 && p->y_nm < LOCBOX_SIZE_NM);
+                        assert(p->y_nm >= 0 && p->y_nm < CELL_SIZE_NM);
                     } else {  // vars->disp == YZ
                         x = pane->w/2 + (p->y_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
                         y = pane->h/2 + (p->z_nm + vars->y_offset_nm) / NM_PER_PIXEL;
-                        assert(p->x_nm >= 0 && p->x_nm < LOCBOX_SIZE_NM);
+                        assert(p->x_nm >= 0 && p->x_nm < CELL_SIZE_NM);
                     }
 
                     if (!p->ion) {
@@ -270,7 +269,6 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
                         }
                     }
                 }
-                //xxx pthread_spin_unlock(&lb->particle_list_spinlock);
             }
         }
         if (max_points_atom > 0) {
@@ -289,7 +287,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         int64_t x, y_min, y_max;
         int64_t y, x_min, x_max;
         if (vars->grid == GRID_ON) {
-            for (x_nm = -r_nm; x_nm <= r_nm; x_nm += LOCBOX_SIZE_NM) {
+            for (x_nm = -r_nm; x_nm <= r_nm; x_nm += CELL_SIZE_NM) {
                 x = pane->w/2 + (x_nm + vars->x_offset_nm) / NM_PER_PIXEL; 
                 tmp_nm = r_nm*r_nm - x_nm*x_nm;
                 if (tmp_nm < 0) continue;
@@ -300,7 +298,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
                 if (y_max > pane->h-1) y_max = pane->h-1;
                 sdl_render_line(pane, x, y_min, x, y_max, GRAY);
             }
-            for (y_nm = -r_nm; y_nm <= r_nm; y_nm += LOCBOX_SIZE_NM) {
+            for (y_nm = -r_nm; y_nm <= r_nm; y_nm += CELL_SIZE_NM) {
                 y = pane->h/2 + (y_nm + vars->y_offset_nm) / NM_PER_PIXEL; 
                 tmp_nm = r_nm*r_nm - y_nm*y_nm;
                 if (tmp_nm < 0) continue;

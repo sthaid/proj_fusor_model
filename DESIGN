@@ -1,3 +1,31 @@
+================
+TODO
+================
+
+hydrogen cations
+https://en.wikipedia.org/wiki/Dihydrogen_cation
+
+work on model.c
+- cell and shell 
+- mean free path of D gas
+- add code for to ionize the shells at a fixed rate
+- integrate the model_ionization
+   - cache results in a file
+
+cross section of atomic Hydrogen
+   search "cross section of hydrogen atom"
+     www.springer.com/cda/content/document/cda.../9783540858485-c1.pdf?SGWID...
+     file:///home/haid/Downloads/9783540858485-c1.pdf
+             8.82 × 10−17 cm−2
+
+work on xxx issues in all files
+
+get hydrogen ionization in proton collision
+
+================
+DONE
+================
+
 find script for xxx issues
 
 recompile all programs
@@ -7,14 +35,15 @@ get rid of the random range cache
 
 do something about profiling, in the Makefile
 
-xxx issues in all files
+================
+ORGANIZE ...
+================
 
 ---------------------
 
 Born approximation calculations by Bates and Dalgarno
 
 https://books.google.com/books?id=lACtfPidiLQC&pg=PA32&lpg=PA32&dq=Born+approximation+calculations+by+Bates+and+Dalgarno&source=bl&ots=SRuvf24izc&sig=poIhU7kCY-xQnWxofJjGS1tbtQM&hl=en&sa=X&ved=0ahUKEwjitI_41s_XAhVl7IMKHdvcDcoQ6AEIKDAA#v=onepage&q=Born%20approximation%20calculations%20by%20Bates%20and%20Dalgarno&f=false
-
 
 ------------------
 
@@ -29,20 +58,7 @@ Ionization and Charge Transfer in Proton-Hydrogen Atom Collisions
 
 link.aps.org/pdf/10.1103/PhysRev.119.663
 
-
 --------------------
-
-TODO
-- threads in model.c
-- test creating random ions and accelerate them towards the grid
-- sdl init
-- sdl display layout
-- sdl chamber
-- sdl graphs
-
-DONE
-
------------------------
 
 DATA
 - array of particles

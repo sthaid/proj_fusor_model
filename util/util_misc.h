@@ -108,9 +108,11 @@ int do_send(int sockfd, void * send_buff, size_t len);
 // -----------------  RANDOM NUMBERS  ------------------------------------
 
 int32_t random_range(int32_t min, int32_t max);
+void random_vector(int32_t magnitude, int32_t * xarg, int32_t * yarg, int32_t * zarg);
 
-// -----------------  QUADRATIC EQUATION  --------------------------------
+// -----------------  MATH  ----------------------------------------------
 
 bool solve_quadratic_equation(double a, double b, double c, double *x1, double *x2);
+int32_t hypotenuse(int32_t x, int32_t y, int32_t z);
 
 #endif

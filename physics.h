@@ -9,9 +9,10 @@
 #define C_TO_K(tc)              ((tc) + 273.15)
 #define F_TO_K(tf)              (C_TO_K(F_TO_C(tf)))
 #define M_TO_IN(m)              ((m) * 39.3701)                  // length
-#define M_TO_NM(m)              ((m)  * 1000000000)
-#define NM_TO_M(nm)             ((nm) / 1000000000)
-#define M_TO_MM(m)              ((m)  * 1000)
+#define NM_TO_IN(nm)            ((nm) * 39.3701e-9)
+#define M_TO_NM(m)              ((m)  * 1000000000)              //   careful using these, 
+#define NM_TO_M(nm)             ((nm) / 1000000000)              //   may need to cast the arg
+#define M_TO_MM(m)              ((m)  * 1000)                    //   to double in some cases
 #define MM_TO_M(mm)             ((mm) / 1000)
 #define MM_TO_NM(mm)            ((mm) * 1000000)
 #define NM_TO_MM(nm)            ((nm) / 1000000)
