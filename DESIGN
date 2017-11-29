@@ -2,6 +2,31 @@
 TODO
 ================
 
+clean up and check in
+
+sdl
+- locking so alt x and arrows is blocked
+- render start and complete callbacks
+
+model get data routine
+- call this from render start
+
+can reducing display update frequency improve performance
+
+identify other areas where performance can be improved
+
+graph pane handler, 
+- inputs
+    address of points, number of points
+    x range, units
+    y scale, and units
+    graph name
+    
+
+
+
+search for double in code
+
 hydrogen cations
 https://en.wikipedia.org/wiki/Dihydrogen_cation
 
@@ -21,6 +46,22 @@ cross section of atomic Hydrogen
 work on xxx issues in all files
 
 get hydrogen ionization in proton collision
+
+
+HIGH
+- model the ionization rate, and dipslay graph of the result
+- add predefined graphing pane to sdl2
+- display temperature graph, and test by setting the shell to high temperature
+- ways to increase performance, such as skipping cells that dont have ions, for a bit
+- add a control to adjust the pancake height, and center the pancake 
+- display performance metric
+- use memory mapped file, OR try periodically writing the file
+MEDIUM
+- change param values by left or right click OR mouse wheel
+- use a scale table, with factor the eighth root of 2
+LOW
+- try using SDL_RenderSetLogicalSize
+
 
 ================
 DONE

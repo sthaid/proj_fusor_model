@@ -4,21 +4,13 @@
 // conversion macros
 #define AMU_TO_KG(amu)          ((amu) * 1.66054e-27)            // mass 
 #define MTORR_TO_PASCAL(mtorr)  ((mtorr) * 0.13332237)           // pressure
-#define UTORR_TO_PASCAL(utorr)  ((utorr) * 0.00013332237)
+#define PASCAL_TO_MTORR(pascal) ((pascal) * 7.5006163)
 #define F_TO_C(tf)              (((tf) - 32.0) * (5.0 / 9.0))    // temperature
 #define C_TO_K(tc)              ((tc) + 273.15)
 #define F_TO_K(tf)              (C_TO_K(F_TO_C(tf)))
-#define M_TO_IN(m)              ((m) * 39.3701)                  // length
-#define NM_TO_IN(nm)            ((nm) * 39.3701e-9)
-#define M_TO_NM(m)              ((m)  * 1000000000)              //   careful using these, 
-#define NM_TO_M(nm)             ((nm) / 1000000000)              //   may need to cast the arg
-#define M_TO_MM(m)              ((m)  * 1000)                    //   to double in some cases
-#define MM_TO_M(mm)             ((mm) / 1000)
-#define MM_TO_NM(mm)            ((mm) * 1000000)
-#define NM_TO_MM(nm)            ((nm) / 1000000)
-#define MPERS_TO_NMPERNS(v)     (v)                             // velocity
-#define JOULES_TO_EV(j)         ((j) * 6.242e+18)               // energy
+#define JOULES_TO_EV(j)         ((j) * 6.242e+18)                // energy
 #define EV_TO_JOULES(ev)        ((ev) * 1.60218e-19)
+#define M_TO_IN(m)              ((m) * 39.3701)                  // length
 
 // temperature 
 #define ROOM_TEMPERATURE_K 293.0
@@ -29,7 +21,8 @@
 
 // hydrogen
 #define H_IONIZATION_ENERGY_EV  13.5984
-#define H2_KINETIC_DIAMETER     289e-12 // meters
+#define H2_KINETIC_DIAMETER     289e-12 // meters   XXX use H
+#define H2_CROSS_SECTION        (CROSS_SECTION(H2_KINETIC_DIAMETER))
 
 // electron 
 #define ELECTRON_CHARGE -1.60217662e-19   // C
@@ -40,7 +33,7 @@
 #define PROTON_MASS     1.6726219e-27     // kg
 
 // kinetic temperature
-// reference: http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/kintem.html
+// http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/kintem.html
 #define K 1.38066e-23  // Boltzmann constant Joules/Kelvin
 #define TEMPERATURE_TO_VELOCITY(t,m) (sqrt((t) * (3. * K / (m))))
 #define VELOCITY_TO_TEMPERATURE(v,m) (((m) / (3. * K)) * (v) * (v))

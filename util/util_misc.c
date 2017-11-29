@@ -307,50 +307,49 @@ int do_send(int sockfd, void * send_buff, size_t len)
 
 // -----------------  RANDOM NUMBERS  ------------------------------------
 
-int32_t random_range(int32_t min, int32_t max)
+// returns random float value in range min to max inclusive
+float random_range(float min, float max)
 {
-    int64_t extent = (int64_t)max - min + 1L;
-    return random() * extent / (RAND_MAX+1L) + min;
+    return ((float)random() / RAND_MAX) * (max - min) + min;
 }
 
-void random_vector(int32_t magnitude, int32_t * xarg, int32_t * yarg, int32_t * zarg)
+// returns a vector whose length equals 'magnitude' and with a random direction
+void random_vector(float magnitude, float * x, float * y, float * z)
 {
-    int32_t x, y, z, r;
+    float x_try, y_try, z_try, hypot, f;
 
-    // this routine returns a vector whose length equals 'magnitude' and
-    // with a random direction
-
-    // xxx comment
+    // compute x/y/z_try within a spherical shell 
     while (true) {
-        x = random() - RAND_MAX/2;
-        y = random() - RAND_MAX/2;
-        z = random() - RAND_MAX/2;
-        r = hypotenuse(x,y,z); 
-        if (r > RAND_MAX/10 && r < RAND_MAX/2) {
+        x_try = random() - (RAND_MAX/2.);
+        y_try = random() - (RAND_MAX/2.);
+        z_try = random() - (RAND_MAX/2.);
+        hypot = hypotenuse(x_try,y_try,z_try);
+        if (hypot >= (RAND_MAX/10.) && hypot <= (RAND_MAX/2.)) {
             break;
         }
     }
 
-    // xxx comment
-    *xarg = (int64_t)x * magnitude / r;
-    *yarg = (int64_t)y * magnitude / r;
-    *zarg = (int64_t)z * magnitude / r;
+    // scale the random vector to the caller's specified magnitude
+    f = magnitude / hypot;
+    *x = x_try * f;
+    *y = y_try * f;
+    *z = z_try * f;
 
 #if 0
     // verification
-    int32_t magnitude_check = hypotenuse(*xarg, *yarg, *zarg);
-    if (abs(magnitude_check-magnitude) > 2) {
-        FATAL("magnitude=%d magnitude_check=%d, xyz=%d %d %d\n",
-              magnitude, magnitude_check, *xarg, *yarg, *zarg);
+    float magnitude_check = hypotenuse(*x, *y, *z);
+    if (fabsf(magnitude_check-magnitude) > 2) {
+        FATAL("magnitude=%f magnitude_check=%f, xyz=%f %f %f\n",
+              magnitude, magnitude_check, *x, *y, *z);
     }
 #endif
 }
 
 // -----------------  MATH  ----------------------------------------------
 
-bool solve_quadratic_equation(double a, double b, double c, double *x1, double *x2)
+bool solve_quadratic_equation(float a, float b, float c, float *x1, float *x2)
 {
-    double discriminant, temp;
+    float discriminant, temp;
 
     discriminant = b*b - 4*a*c;
     if (discriminant < 0) {
@@ -362,11 +361,8 @@ bool solve_quadratic_equation(double a, double b, double c, double *x1, double *
     return true;
 }
 
-int32_t hypotenuse(int32_t x, int32_t y, int32_t z)
+float hypotenuse(float x, float y, float z)
 {
-    int64_t hypotenuse_squared = (int64_t)x * (int64_t)x +
-                                 (int64_t)y * (int64_t)y +
-                                 (int64_t)z * (int64_t)z;
-    return sqrt(hypotenuse_squared);
+    return sqrtf(x*x + y*y + z*z);
 }
 

@@ -40,9 +40,14 @@ pthread_barrier_t barrier;
 
 void run_benchmark(char * name, void * (*proc)(void *), int32_t num_threads);
 void use_the_result(void * volatile x);
+
 void * int32_test(void * cx);
 void * int64_test(void * cx);
+void * float_test(void * cx);
 void * double_test(void * cx);
+
+void * compiler1_test(void * cx);
+void * compiler2_test(void * cx);
 
 // -----------------  MAIN  --------------------------------------------
 
@@ -57,7 +62,13 @@ int main(int argc, char ** argv)
 
     run_benchmark("int32_test", int32_test, num_threads);
     run_benchmark("int64_test", int64_test, num_threads);
+    run_benchmark("float_test", float_test, num_threads);
     run_benchmark("double_test", double_test, num_threads);
+    printf("\n");
+
+    run_benchmark("compiler1_test", compiler1_test, num_threads);
+    run_benchmark("compiler2_test", compiler2_test, num_threads);
+    printf("\n");
 }
 
 void run_benchmark(char * name, void * (*proc)(void *), int32_t num_threads)
@@ -159,6 +170,31 @@ void * int64_test(void * cx)
     return NULL;
 }
 
+void * float_test(void * cx)
+{
+    int64_t * ops_count = cx;
+    float sum, a, b, c;
+
+    pthread_barrier_wait(&barrier);
+
+    sum = a = b = 0; c = 1;
+    while (true) {
+        sum = sum + a * b / c;
+        a += 1;
+        b += 2;
+        c += 1;
+
+        (*ops_count)++;
+        if (terminate) {
+            __sync_fetch_and_add(&terminated_count,1);
+            use_the_result(&sum);
+            break;
+        }
+    }
+
+    return NULL;
+}
+
 void * double_test(void * cx)
 {
     int64_t * ops_count = cx;
@@ -172,6 +208,50 @@ void * double_test(void * cx)
         a += 1;
         b += 2;
         c += 1;
+
+        (*ops_count)++;
+        if (terminate) {
+            __sync_fetch_and_add(&terminated_count,1);
+            use_the_result(&sum);
+            break;
+        }
+    }
+
+    return NULL;
+}
+
+// -----------------  BENCHMARKS  --------------------------------------
+
+void * compiler1_test(void * cx)
+{
+    int64_t * ops_count = cx;
+    double sum = 0;
+
+    pthread_barrier_wait(&barrier);
+
+    while (true) {
+        sum += (1. + 2. + 3. + 4. + 5. + 6. + 7. + 8. + 9. + 10.);
+
+        (*ops_count)++;
+        if (terminate) {
+            __sync_fetch_and_add(&terminated_count,1);
+            use_the_result(&sum);
+            break;
+        }
+    }
+
+    return NULL;
+}
+
+void * compiler2_test(void * cx)
+{
+    int64_t * ops_count = cx;
+    double sum = 0;
+
+    pthread_barrier_wait(&barrier);
+
+    while (true) {
+        sum += 56.;
 
         (*ops_count)++;
         if (terminate) {
