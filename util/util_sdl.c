@@ -21,8 +21,6 @@ SOFTWARE.
 */
 
 // XXX review
-// XXX ctrl key not working, may be because I've enabled
-//          gsettings set org.gnome.settings-daemon.peripherals.mouse locate-pointer true
 // XXX mouse fliccker problem
 // XXX comments on all APIs
 // XXX document examples on how to use this
@@ -356,8 +354,12 @@ static void sdl_set_color(int32_t color)
 
 // -----------------  PANE MANAGER  ------------------------------------- 
 
-// xxx comment  ... is:  pane_handler, init, x_disp, y_disp, w, h, border_style
-void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t), int32_t count, ...)
+void sdl_pane_manager(void *display_cx,                        // optional, context
+                      void (*display_start)(void *display_cx), // optional, called prior to pane handlers
+                      void (*display_end)(void *display_cx),   // optional, called after pane handlers
+                      int64_t redraw_interval_us,              // 0=continuous, -1=never, else us
+                      int32_t count,                           // number of pane handler varargs that follow
+                      ...)                                     // pane_handler, init_params, x_disp, y_disp, w, h, border_style
 {
     #define FG_PANE_CX (TAILQ_LAST(&pane_list_head,pane_list_head_s))
 
@@ -365,11 +367,11 @@ void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t), int32_t count, ..
     #define SDL_EVENT_PANE_MOVE              0xffffff02
     #define SDL_EVENT_PANE_TERMINATE         0xffffff03
 
-    va_list ap;  // xxx organize
+    va_list ap; 
     pane_cx_t *pane_cx, *pane_cx_next;
     int32_t ret, i, win_width, win_height;
     bool redraw;
-    uint64_t time_render_us;
+    uint64_t start_us;
     sdl_event_t * event;
     struct pane_list_head_s pane_list_head;
     rect_t loc_full_pane, loc_bar_move, loc_bar_terminate;
@@ -385,13 +387,14 @@ void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t), int32_t count, ..
     va_start(ap, count);
     for (i = 0; i < count; i++) {
         pane_handler_t pane_handler = va_arg(ap, void*);
-        void         * init         = va_arg(ap, void*);
+        void         * init_params  = va_arg(ap, void*);
         int32_t        x_disp       = va_arg(ap, int32_t);
         int32_t        y_disp       = va_arg(ap, int32_t);
         int32_t        w_total      = va_arg(ap, int32_t);
         int32_t        h_total      = va_arg(ap, int32_t);
         int32_t        border_style = va_arg(ap, int32_t);
-        sdl_pane_create(&pane_list_head, pane_handler, init, x_disp, y_disp, w_total, h_total, border_style);
+        sdl_pane_create(&pane_list_head, pane_handler, init_params, x_disp, y_disp, w_total, h_total, 
+                        border_style, display_cx);
     }
     va_end(ap);
 
@@ -403,9 +406,14 @@ void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t), int32_t count, ..
         }
 
         // init
-        time_render_us = microsec_timer();
-        sdl_display_init(&win_width, &win_height, NULL);  // xxx how are win_width and win_height used
+        start_us = microsec_timer();
+        sdl_display_init(&win_width, &win_height, NULL);  // XXX perhaps win_width/height should be used
         redraw = false;
+
+        // call display_start, if supplied 
+        if (display_start) {
+            display_start(display_cx);
+        }
 
         // call all pane_handler render
         for (pane_cx = TAILQ_FIRST(&pane_list_head); pane_cx != NULL; pane_cx = pane_cx_next) {
@@ -429,6 +437,11 @@ void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t), int32_t count, ..
             } else if (ret == PANE_HANDLER_RET_DISPLAY_REDRAW) {
                 redraw = true;
             }
+        }
+
+        // call display_end, if supplied 
+        if (display_end) {
+            display_end(display_cx);
         }
 
         // if redraw has been requested or global program_quit flag is set then continue
@@ -510,11 +523,10 @@ void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t), int32_t count, ..
                 }
             }
 
-            if (!redraw) {
-                redraw = display_redraw_needed(time_render_us);
-            }
-
-            if (redraw || sdl_program_quit) {
+            if ((redraw) || 
+                (redraw_interval_us != -1 && microsec_timer() >= start_us + redraw_interval_us) ||
+                (sdl_program_quit))
+            {
                 break;
             }
 
@@ -528,13 +540,15 @@ void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t), int32_t count, ..
     }
 }
 
-void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pane_handler, void * init,
-                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style)
+void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pane_handler, void * init_params,
+                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style,
+                     void * display_cx)
 {
     pane_cx_t * pane_cx;
 
     // alloc and init a pane_cx
     pane_cx = calloc(1, sizeof(pane_cx_t));
+    pane_cx->display_cx     = display_cx;
     pane_cx->x_disp         = x_disp;
     pane_cx->y_disp         = y_disp;
     pane_cx->w_total        = w_total;
@@ -549,7 +563,7 @@ void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pa
     TAILQ_INSERT_TAIL(pane_list_head, pane_cx, entries);
 
     // call the pane_handler init
-    pane_handler(pane_cx, PANE_HANDLER_REQ_INITIALIZE, init, NULL);
+    pane_handler(pane_cx, PANE_HANDLER_REQ_INITIALIZE, init_params, NULL);
 }
 
 static void sdl_pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t * pane_cx)
@@ -1249,7 +1263,7 @@ void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_
                        int32_t line_width, int32_t color)
 {
     int32_t count = 0, i, angle, x, y;
-    SDL_Point points[370];  // XXX does this need to be even?
+    SDL_Point points[370];
 
     static int32_t sin_table[370];
     static int32_t cos_table[370];
@@ -1366,7 +1380,7 @@ texture_t sdl_create_texture(int32_t w, int32_t h)
 
     texture = SDL_CreateTexture(sdl_renderer,
                                 SDL_PIXELFORMAT_ABGR8888,
-                                SDL_TEXTUREACCESS_STREAMING,  // XXX or STATIC
+                                SDL_TEXTUREACCESS_STREAMING,
                                 w, h);
     if (texture == NULL) {
         ERROR("failed to allocate texture, %s\n", SDL_GetError());

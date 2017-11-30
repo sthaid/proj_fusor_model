@@ -144,6 +144,7 @@ struct pane_cx_s;
 TAILQ_HEAD(pane_list_head_s, pane_cx_s);
 typedef int32_t (*pane_handler_t)(struct pane_cx_s * pane_cx, int32_t request, void * init, sdl_event_t * event);
 typedef struct pane_cx_s {
+    void * display_cx;
     int32_t x_disp;
     int32_t y_disp;
     int32_t w_total;
@@ -165,9 +166,15 @@ int32_t sdl_init(int32_t * w, int32_t * h, bool resizeable, bool scale_fonts_whe
 void sdl_get_max_texture_dim(int32_t * max_texture_dim);
 
 // pane support
-void sdl_pane_manager(bool (*display_redraw_needed)(uint64_t time_render_us), int32_t count, ...);
+void sdl_pane_manager(void *display_cx,                        // optional, context
+                      void (*display_start)(void *display_cx), // optional, called prior to pane handlers
+                      void (*display_end)(void *display_cx),   // optional, called after pane handlers
+                      int64_t redraw_interval_us,              // 0=continuous, -1=never, else us
+                      int32_t count,                           // number of pane handler varargs that follow
+                      ...);                                    // pane_handler, init_params, x_disp, y_disp, w, h, border_style
 void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pane_handler, void * init,
-                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style);
+                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
+                     int32_t border_style, void * display_cx);
 rect_t sdl_init_pane(int32_t x_disp, int32_t y_disp, int32_t w, int32_t h,
                      int32_t border_style, int32_t border_color, bool clear,
                      rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_x);

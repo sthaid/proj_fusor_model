@@ -48,7 +48,8 @@ SOFTWARE.
 static int32_t pane_handler_demo(pane_cx_t * cx, int32_t request, void * init, sdl_event_t * event);
 static int32_t pane_handler_points_test(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event);
 static int32_t pane_handler_lines_test(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event);
-static bool display_redraw_needed(uint64_t time_render_us);
+static void display_start(void * display_cx);
+static void display_end(void * display_cx);
 
 // -----------------  MAIN  ------------------------------------------------
 
@@ -62,7 +63,11 @@ int main(int argc, char **argv)
         FATAL("sdl_init %dx%d failed\n", win_width, win_height);
     }
 
-    sdl_pane_manager(display_redraw_needed, 1,
+    sdl_pane_manager(NULL,           // display_cx
+                     display_start,  // called prior to pane handlers
+                     display_end,    // called after pane handlers
+                     30000,          // redraw interval us
+                     1,              // 1 pane handler
                      pane_handler_demo, NULL, 0, 0, 400, 400, PANE_BORDER_STYLE_STANDARD);
 
     return 0;
@@ -252,23 +257,32 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_DEMO_PANE:
                 sdl_pane_create(pane_cx->pane_list_head, pane_handler_demo, NULL,
-                                400, 400, pane_cx->w_total, pane_cx->h_total, PANE_BORDER_STYLE_STANDARD);
+                                400, 400, pane_cx->w_total, pane_cx->h_total, 
+                                PANE_BORDER_STYLE_STANDARD, pane_cx->display_cx);
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_TEXT_PANE:
                 sdl_pane_create(pane_cx->pane_list_head, pane_handler_display_text, text,
-                                100, 100, 800, 800, PANE_BORDER_STYLE_STANDARD);
+                                100, 100, 800, 800, 
+                                PANE_BORDER_STYLE_STANDARD, pane_cx->display_cx);
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_POINTS_PANE:
                 sdl_pane_create(pane_cx->pane_list_head, pane_handler_points_test, NULL,
-                                400, 0, 804, 804, PANE_BORDER_STYLE_MINIMAL);
+                                400, 0, 804, 804, 
+                                PANE_BORDER_STYLE_MINIMAL, pane_cx->display_cx);
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_LINES_PANE:
                 sdl_pane_create(pane_cx->pane_list_head, pane_handler_lines_test, NULL,
-                                400, 400, 400, 400, PANE_BORDER_STYLE_STANDARD);
+                                400, 400, 400, 400, 
+                                PANE_BORDER_STYLE_STANDARD, pane_cx->display_cx);
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_DISPLAY:
-                sdl_pane_manager(display_redraw_needed, 1,
+                sdl_pane_manager(NULL,           // optional, context
+                                 display_start,  // optional, called prior to pane handlers
+                                 display_end,    // optional, called after pane handlers
+                                 30000,          // 0=continuous, -1=never, else us
+                                 1,              // number of pane handler varargs that follow
                                  pane_handler_demo, NULL, 0, 0, 400, 400, PANE_BORDER_STYLE_STANDARD);
+                                                 // pane_handler, init_params, x_disp, y_disp, w, h, border_style
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             }
         }
@@ -440,62 +454,13 @@ static int32_t pane_handler_lines_test(pane_cx_t * pane_cx, int32_t request, voi
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-static bool display_redraw_needed(uint64_t time_render_us)
+static void display_start(void * display_cx)
 {
-    return microsec_timer() - time_render_us > 30000;
+    // nothing to do here
 }
 
-// -----------------  PANE HANDLER TEMPLATE  -------------------------------
-
-#if 0
-static int32_t pane_handler_xxx(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) 
+static void display_end(void * display_cx)
 {
-    struct {
-    } * vars = pane_cx->vars;
-    rect_t * pane = &pane_cx->pane;
-
-    // ----------------------------
-    // -------- INITIALIZE --------
-    // ----------------------------
-
-    if (request == PANE_HANDLER_REQ_INITIALIZE) {
-        vars = pane_cx->vars = calloc(1,sizeof(*vars));
-        xxx
-        return PANE_HANDLER_RET_NO_ACTION;
-    }
-
-    // ------------------------
-    // -------- RENDER --------
-    // ------------------------
-
-    if (request == PANE_HANDLER_REQ_RENDER) {
-        xxx
-        return PANE_HANDLER_RET_NO_ACTION;
-    }
-
-    // -----------------------
-    // -------- EVENT --------
-    // -----------------------
-
-    if (request == PANE_HANDLER_REQ_EVENT) {
-        switch(event->event_id) {
-        case SDL_EVENT_xxx
-            return PANE_HANDLER_RET_DISPLAY_REDRAW;
-        }
-        return PANE_HANDLER_RET_NO_ACTION;
-    }
-
-    // ---------------------------
-    // -------- TERMINATE --------
-    // ---------------------------
-
-    if (request == PANE_HANDLER_REQ_TERMINATE) {
-        free(vars);
-        return PANE_HANDLER_RET_NO_ACTION;
-    }
-
-    // not reached
-    assert(0);
-    return PANE_HANDLER_RET_NO_ACTION;
+    // nothing to do here
 }
-#endif
+
