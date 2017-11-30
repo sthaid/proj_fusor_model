@@ -34,6 +34,8 @@ SOFTWARE.
 #include <limits.h>
 #include <assert.h>
 
+#include <math.h>
+
 #include "util_sdl.h"
 #include "util_sdl_predefined_panes.h"
 #include "util_misc.h"
@@ -109,9 +111,10 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
     #define SDL_EVENT_MOUSE_WHEEL      (SDL_EVENT_USER_DEFINED+1)
     #define SDL_EVENT_NEW_DEMO_PANE    (SDL_EVENT_USER_DEFINED+2)
     #define SDL_EVENT_NEW_TEXT_PANE    (SDL_EVENT_USER_DEFINED+3)
-    #define SDL_EVENT_NEW_POINTS_PANE  (SDL_EVENT_USER_DEFINED+4)
-    #define SDL_EVENT_NEW_LINES_PANE   (SDL_EVENT_USER_DEFINED+5)
-    #define SDL_EVENT_NEW_DISPLAY      (SDL_EVENT_USER_DEFINED+6)
+    #define SDL_EVENT_NEW_GRAPH_PANE   (SDL_EVENT_USER_DEFINED+4)
+    #define SDL_EVENT_NEW_POINTS_PANE  (SDL_EVENT_USER_DEFINED+5)
+    #define SDL_EVENT_NEW_LINES_PANE   (SDL_EVENT_USER_DEFINED+6)
+    #define SDL_EVENT_NEW_DISPLAY      (SDL_EVENT_USER_DEFINED+7)
 
     #define CIRCLE_RADIUS (pane_cx->pane.w / 10)
 
@@ -127,6 +130,8 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
         int32_t   mouse_click_test_counter;
         int32_t   mouse_wheel_test_counter;
         int32_t   key_event_id;
+        void    * graph_params_ptr;
+        pane_hndlr_display_graph_params_t * graph_params;
     } * vars = pane_cx->vars;
 
     static int32_t instance;
@@ -148,6 +153,27 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
         vars->mouse_click_test_counter = 0;
         vars->mouse_wheel_test_counter = 0;
         vars->key_event_id = 0; 
+        vars->graph_params_ptr = &vars->graph_params;
+        vars->graph_params = NULL;
+
+        int32_t i, max_points=360;
+        vars->graph_params = malloc(sizeof(pane_hndlr_display_graph_params_t) +
+                                    max_points * sizeof(struct pane_hndlr_display_graph_point_s));
+        pane_hndlr_display_graph_params_t *g = vars->graph_params;
+        g->max_points_alloced = max_points;
+        strcpy(g->title_str, "TITLE");
+        strcpy(g->x_units_str, "X_UNIT");
+        strcpy(g->y_units_str, "Y_UNIT");
+        g->x_min = 0;
+        g->x_max = 2 * M_PI;
+        g->y_min = -1;
+        g->y_max = 1;
+        for (i = 0; i < max_points; i++) {
+            g->points[i].x = i*(2*M_PI/360);
+            g->points[i].y = sin(i*(2*M_PI/360));
+        }
+        g->max_points = max_points;
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -196,6 +222,11 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
         sdl_render_text_and_register_event(
             pane, 6, 0, 0, "NEW_TEXT_PANE", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_TEXT_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
+        // 'NEW_GRAPH_PANE' create another text pane
+        sdl_render_text_and_register_event(
+            pane, 6, 0, 0, "NEW_GRAPH_PANE", LIGHT_BLUE, BLACK, 
+            SDL_EVENT_NEW_GRAPH_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // 'NEW_POINTS' create the points test pane
         sdl_render_text_and_register_event(
@@ -261,8 +292,13 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
                                 PANE_BORDER_STYLE_STANDARD, pane_cx->display_cx);
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_TEXT_PANE:
-                sdl_pane_create(pane_cx->pane_list_head, pane_handler_display_text, text,
+                sdl_pane_create(pane_cx->pane_list_head, pane_hndlr_display_text, text,
                                 100, 100, 800, 800, 
+                                PANE_BORDER_STYLE_STANDARD, pane_cx->display_cx);
+                return PANE_HANDLER_RET_DISPLAY_REDRAW;
+            case SDL_EVENT_NEW_GRAPH_PANE:
+                sdl_pane_create(pane_cx->pane_list_head, pane_hndlr_display_graph, vars->graph_params_ptr,
+                                500, 100, 550, 300,
                                 PANE_BORDER_STYLE_STANDARD, pane_cx->display_cx);
                 return PANE_HANDLER_RET_DISPLAY_REDRAW;
             case SDL_EVENT_NEW_POINTS_PANE:
@@ -295,6 +331,7 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
 
     if (request == PANE_HANDLER_REQ_TERMINATE) {
         sdl_destroy_texture(vars->circle_texture);
+        free(vars->graph_params);
         free(vars);
         return PANE_HANDLER_RET_NO_ACTION;
     }

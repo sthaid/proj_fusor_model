@@ -17,9 +17,12 @@
 #include <pthread.h>
 #include <sys/mman.h>
 
-#include "model.h"
-#include "physics.h"
+#include "util_sdl.h"
+#include "util_sdl_predefined_panes.h"
 #include "util_misc.h"
+
+#include "physics.h"
+#include "model.h"
 
 //
 // defines
@@ -102,7 +105,7 @@ static inline void random_location_within_chamber(float *x, float *y, float *z, 
     }
 }
 
-// -----------------  MODEL INIT FROM PARAMS  --------------------------------------------
+// -----------------  MODEL_INIT  --------------------------------------------------------
 
 void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
         float grid_voltage, float grid_current)
@@ -327,7 +330,7 @@ static void init_particle(particle_t * p)
     c->shell->number_of_atoms++;
 }
 
-// -----------------  RUN CONTROL API  ---------------------------------------------------
+// -----------------  MODEL CONTROL API  -------------------------------------------------
 
 void model_start(void)
 {
@@ -357,7 +360,37 @@ void model_terminate(void)
     model_stop();
 }
 
-// -----------------  MODEL THREADS  ---------------------------------------------------------
+// XXX much more work here
+void model_get_data(pane_hndlr_display_graph_params_t ** graph_temp)
+{
+    pane_hndlr_display_graph_params_t *g;
+    int32_t max_points_needed = 360;
+    int32_t i;
+
+    if (*graph_temp == NULL || (*graph_temp)->max_points_alloced < max_points_needed) {
+        INFO("XXXXXXXXXXXXXXXX ALLOCING \n");
+        *graph_temp = malloc(sizeof(pane_hndlr_display_graph_params_t) +
+                             max_points_needed * sizeof(struct pane_hndlr_display_graph_point_s));
+        g = *graph_temp;
+        strcpy(g->title_str, "TITLE");
+        strcpy(g->x_units_str, "X_UNIT");
+        strcpy(g->y_units_str, "Y_UNIT");
+        g->x_min = 0;
+        g->x_max = 2 * M_PI;
+        g->y_min = -1;
+        g->y_max = 1;
+        g->max_points_alloced = max_points_needed;
+    }
+
+    g = *graph_temp;
+    for (i = 0; i < max_points_needed; i++) {
+        g->points[i].x = i*(2*M_PI/360);
+        g->points[i].y = sin(i*(2*M_PI/360));
+    }
+    g->max_points = max_points_needed;
+}
+
+// -----------------  MODEL_THREAD  ----------------------------------------------------------
 
 #define MAX_WORK_LIST_HEAD 5000
 

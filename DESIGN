@@ -2,14 +2,13 @@
 TODO
 ================
 
-clean up and check in
-
 sdl
 - locking so alt x and arrows is blocked
 - render start and complete callbacks
 
 model get data routine
 - call this from render start
+- save temperature info in the shell
 
 can reducing display update frequency improve performance
 

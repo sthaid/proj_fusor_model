@@ -13,7 +13,7 @@ SRC_SDLTEST = sdltest.c \
 # build rules
 #
 
-sdltest:
+sdltest: $(SRC_SDLTEST)
 	$(CC) -g -O2 -pthread -Wall -I.. \
               $(SDL2_CFLAGS) \
               -lrt -lm -lpng -ljpeg -lSDL2 -lSDL2_ttf -lSDL2_mixer \

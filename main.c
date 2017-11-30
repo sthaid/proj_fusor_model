@@ -15,9 +15,11 @@
 #include <pthread.h>
 #include <math.h>
 
-#include "model.h"
 #include "util_sdl.h"
+#include "util_sdl_predefined_panes.h"
 #include "util_misc.h"
+
+#include "model.h"
 
 //
 // defines
@@ -34,14 +36,17 @@
 // variables
 //
 
+pane_hndlr_display_graph_params_t * graph1; // xxx name
+
 //
 // prototypes
 //
 
 static void help(void);
-static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) ;
-static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) ;
-static bool display_redraw_needed(uint64_t time_render_us);
+static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * init_params, sdl_event_t * event) ;
+static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * init_params, sdl_event_t * event) ;
+static void display_start(void * display_cx);
+static void display_end(void * display_cx);
 
 // -----------------  MAIN  -------------------------------------------------------------
 
@@ -112,9 +117,14 @@ int main(int argc, char **argv)
         FATAL("sdl_init %dx%d failed\n", win_width, win_height);
     }
     sdl_pane_manager(
-        display_redraw_needed, 2,
-        pane_hndlr_chamber, NULL, 0,   0, 800, 800, PANE_BORDER_STYLE_MINIMAL,
-        pane_hndlr_params,  NULL, 0, 800, 800, 200, PANE_BORDER_STYLE_MINIMAL);
+        NULL,           // context
+        display_start,  // called prior to pane handlers
+        display_end,    // called after pane handlers
+        2000000,        // 0=continuous, -1=never, else us XXX
+        3,              // number of pane handler varargs that follow
+        pane_hndlr_chamber, NULL,     0,   0, 800, 800, PANE_BORDER_STYLE_MINIMAL,
+        pane_hndlr_params,  NULL,     0, 800, 800, 200, PANE_BORDER_STYLE_MINIMAL,
+        pane_hndlr_display_graph,  &graph1, 800,   0, 550, 300, PANE_BORDER_STYLE_MINIMAL);
 
     // terminate the model
     model_terminate();
@@ -131,7 +141,7 @@ static void help(void)
 
 // -----------------  PANE HANDLERS ----------------------------------------
 
-static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) 
+static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * init_params, sdl_event_t * event) 
 {
     #define SDL_EVENT_MOUSE_MOTION (SDL_EVENT_USER_DEFINED+0)
     #define SDL_EVENT_MOUSE_WHEEL  (SDL_EVENT_USER_DEFINED+1)
@@ -394,7 +404,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * init, sdl_event_t * event) 
+static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * init_params, sdl_event_t * event) 
 {
     struct {
         int32_t none_yet;
@@ -450,14 +460,12 @@ static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * in
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-// XXX pane_handler_graphs
-
-
-
-
-static bool display_redraw_needed(uint64_t time_render_us)  // xxx or time_last_render_us
+// XXX continue here
+static void display_start(void * display_cx)
 {
-    uint64_t time_now = microsec_timer();
+    model_get_data(&graph1);
+}
 
-    return time_now - time_render_us > 100000;
+static void display_end(void * display_cx)
+{
 }
