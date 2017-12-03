@@ -55,7 +55,7 @@ SOFTWARE.
 // defines
 //
 
-#define MAX_FONT 2
+#define MAX_FONT 3
 #define MAX_EVENT_REG_TBL 1000
 
 #define min(a,b) \
@@ -69,7 +69,6 @@ SOFTWARE.
 
 typedef struct {
     TTF_Font * font;
-    TTF_Font * font_underline;
     int32_t    char_width;
     int32_t    char_height;
 } sdl_font_t;
@@ -243,7 +242,7 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool resizeable, bool scale_fonts_when_
 static int32_t sdl_init_fonts(void)
 {
     int32_t i;
-    int32_t font0_ptsize, font1_ptsize;
+    int32_t font0_ptsize, font1_ptsize, font2_ptsize;
 
     // if sdl_font_path has not been set then return error
     if (sdl_font_path == NULL) {
@@ -256,47 +255,40 @@ static int32_t sdl_init_fonts(void)
             TTF_CloseFont(sdl_font[i].font);
             sdl_font[i].font = NULL;
         }
-        if (sdl_font[i].font_underline) {
-            TTF_CloseFont(sdl_font[i].font_underline);
-            sdl_font[i].font_underline = NULL;
-        }
     }
 
-    // initialize font0 and font0_underline,
-    // this is the small font 
-    font0_ptsize = sdl_win_height / 30 - 1;
+    // initialize font0, the small font
+    font0_ptsize = sdl_win_height / 64 - 1;
     sdl_font[0].font = TTF_OpenFont(sdl_font_path, font0_ptsize);
     if (sdl_font[0].font == NULL) {
         ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
         return -1;
     }
-    sdl_font[0].font_underline = TTF_OpenFont(sdl_font_path, font0_ptsize);
-    if (sdl_font[0].font == NULL) {
-        ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
-        return -1;
-    }
     TTF_SizeText(sdl_font[0].font, "X", &sdl_font[0].char_width, &sdl_font[0].char_height);
-    TTF_SetFontStyle(sdl_font[0].font_underline, TTF_STYLE_UNDERLINE|TTF_STYLE_BOLD);
     INFO("font0 psize=%d width=%d height=%d\n", 
          font0_ptsize, sdl_font[0].char_width, sdl_font[0].char_height);
 
-    // initialize font1 and font1_underline,
-    // this is the large font 
-    font1_ptsize = sdl_win_height / 18 - 1;
+    // initialize font1, the medium font
+    font1_ptsize = sdl_win_height / 32 - 1;
     sdl_font[1].font = TTF_OpenFont(sdl_font_path, font1_ptsize);
     if (sdl_font[1].font == NULL) {
         ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
         return -1;
     }
-    sdl_font[1].font_underline = TTF_OpenFont(sdl_font_path, font1_ptsize);
-    if (sdl_font[1].font == NULL) {
+    TTF_SizeText(sdl_font[1].font, "X", &sdl_font[1].char_width, &sdl_font[1].char_height);
+    INFO("font1 psize=%d width=%d height=%d\n", 
+         font1_ptsize, sdl_font[1].char_width, sdl_font[1].char_height);
+
+    // initialize font2, the large font
+    font2_ptsize = sdl_win_height / 16 - 1;
+    sdl_font[2].font = TTF_OpenFont(sdl_font_path, font2_ptsize);
+    if (sdl_font[2].font == NULL) {
         ERROR("failed TTF_OpenFont %s\n", sdl_font_path);
         return -1;
     }
-    TTF_SizeText(sdl_font[1].font, "X", &sdl_font[1].char_width, &sdl_font[1].char_height);
-    TTF_SetFontStyle(sdl_font[1].font_underline, TTF_STYLE_UNDERLINE|TTF_STYLE_BOLD);
-    INFO("font1 psize=%d width=%d height=%d\n", 
-         font1_ptsize, sdl_font[1].char_width, sdl_font[1].char_height);
+    TTF_SizeText(sdl_font[2].font, "X", &sdl_font[2].char_width, &sdl_font[2].char_height);
+    INFO("font2 psize=%d width=%d height=%d\n", 
+         font2_ptsize, sdl_font[2].char_width, sdl_font[2].char_height);
 
     // return success
     return 0;
@@ -313,7 +305,6 @@ static void sdl_exit_handler(void)
 
     for (i = 0; i < MAX_FONT; i++) {
         TTF_CloseFont(sdl_font[i].font);
-        TTF_CloseFont(sdl_font[i].font_underline);
     }
     TTF_Quit();
 
@@ -770,12 +761,12 @@ void sdl_register_event(rect_t * pane, rect_t * loc, int32_t event_id, int32_t e
     sdl_event_max++;
 }
 
-void sdl_render_text_and_register_event(rect_t * pane, int32_t row, int32_t col,
+void sdl_render_text_and_register_event(rect_t * pane, int32_t x, int32_t y,
         int32_t font_id, char * str, int32_t fg_color, int32_t bg_color, 
         int32_t event_id, int32_t event_type, void * event_cx)
 {
     rect_t loc_clipped;
-    loc_clipped = sdl_render_text(pane, row, col, font_id, str, fg_color, bg_color);
+    loc_clipped = sdl_render_text(pane, x, y, font_id, str, fg_color, bg_color);
     sdl_register_event(pane, &loc_clipped, event_id, event_type, event_cx);
 }
 
@@ -1118,11 +1109,11 @@ void sdl_play_event_sound(void)
 
 // -----------------  RENDER TEXT  -------------------------------------- 
 
-rect_t sdl_render_text(rect_t * pane, int32_t row, int32_t col, int32_t font_id, char * str, 
+rect_t sdl_render_text(rect_t * pane, int32_t x, int32_t y, int32_t font_id, char * str, 
                        int32_t fg_color, int32_t bg_color)
 {
     texture_t texture;
-    int32_t   x, y, width, height;
+    int32_t   width, height;
     rect_t    loc, loc_clipped = {0,0,0,0};
     
     // create the text texture
@@ -1134,13 +1125,12 @@ rect_t sdl_render_text(rect_t * pane, int32_t row, int32_t col, int32_t font_id,
     sdl_query_texture(texture, &width, &height);
 
     // determine the location within the pane that this
-    // texture is to be rendered, based on the row, col and font_id args
-    x = col * sdl_font[font_id].char_width;
-    if (col < 0) {
+    // texture is to be rendered, if x or y is negative then
+    // wrap to other end of the pane
+    if (x < 0) {
         x += pane->w;
     }
-    y = row * sdl_font[font_id].char_height;
-    if (row < 0) {
+    if (y < 0) {
         y += pane->h;
     }
     loc.x = x;
@@ -1158,7 +1148,7 @@ rect_t sdl_render_text(rect_t * pane, int32_t row, int32_t col, int32_t font_id,
     return loc_clipped;
 }
 
-void sdl_render_printf(rect_t * pane, int32_t row, int32_t col, int32_t font_id,
+void sdl_render_printf(rect_t * pane, int32_t x, int32_t y, int32_t font_id,
                        int32_t fg_color, int32_t bg_color, char * fmt, ...) 
 {
     char str[1000];
@@ -1168,7 +1158,7 @@ void sdl_render_printf(rect_t * pane, int32_t row, int32_t col, int32_t font_id,
     vsnprintf(str, sizeof(str), fmt, ap);
     va_end(ap);
     
-    sdl_render_text(pane, row, col, font_id, str, fg_color, bg_color);
+    sdl_render_text(pane, x, y, font_id, str, fg_color, bg_color);
 }
 
 // -----------------  RENDER RECTANGLES & LINES  ------------------------ 

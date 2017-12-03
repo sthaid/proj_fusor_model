@@ -280,7 +280,7 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
           num_real_particles_per_sim_particle, num_real_particles_per_sim_particle);
 
     // init time
-    time_secs = 0;
+    time_model_secs = 0;
 
     // create the model_thread, and
     // wait for the model_thread to set its started flag
@@ -433,7 +433,7 @@ static void * model_thread(void * cx)
         }
 
         // increment the time, and the wlh_idx
-        time_secs += MODEL_TIME_INCREMENT;
+        time_model_secs += MODEL_TIME_INCREMENT;
         wlh_idx = wlh_idx + 1;
         if (wlh_idx == MAX_WORK_LIST_HEAD) {
             wlh_idx = 0;
@@ -470,7 +470,7 @@ static void process_particle(particle_t *p)
     // xxx summary comment
 
     // determine the time since this particle's last interaction 
-    t = time_secs - p->time_last_processed;
+    t = time_model_secs - p->time_last_processed;
 
     // determine the new location of this particle
     x = p->x + p->vx * t;
@@ -499,7 +499,7 @@ static void process_particle(particle_t *p)
                 p->vz = vz;
                 p->v = roomtemp_d_velocity;
                 p->v_squared = roomtemp_d_velocity_squared;
-                p->time_last_processed = time_secs;
+                p->time_last_processed = time_model_secs;
                 nd = cur_shell->number_of_atoms * num_real_particles_per_sim_particle / cur_shell->volume;
                 mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
                 schedule_work(p, mfp/p->v); 
@@ -555,7 +555,7 @@ static void process_particle(particle_t *p)
     p->vz = p->vz * f;
     p->v = new_v;
     p->v_squared = new_v_squared;
-    p->time_last_processed = time_secs;
+    p->time_last_processed = time_model_secs;
     if (new_cell != cur_cell) {
         LIST_REMOVE(p, cell_entries);
         LIST_INSERT_HEAD(&new_cell->particle_list_head, p, cell_entries);
@@ -571,7 +571,7 @@ static void process_particle(particle_t *p)
         ptgt->vz = ptgt->vz * f;
         ptgt->v = new_v;
         ptgt->v_squared = new_v_squared;
-        ptgt->time_last_processed = time_secs;
+        ptgt->time_last_processed = time_model_secs;
         schedule_work(ptgt, t);
     }
 }

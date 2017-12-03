@@ -120,7 +120,7 @@ int main(int argc, char **argv)
         NULL,           // context
         display_start,  // called prior to pane handlers
         display_end,    // called after pane handlers
-        2000000,        // 0=continuous, -1=never, else us XXX
+        250000,         // 0=continuous, -1=never, else us 
         3,              // number of pane handler varargs that follow
         pane_hndlr_chamber, NULL,     0,   0, 800, 800, PANE_BORDER_STYLE_MINIMAL,
         pane_hndlr_params,  NULL,     0, 800, 800, 200, PANE_BORDER_STYLE_MINIMAL,
@@ -145,28 +145,21 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
 {
     #define SDL_EVENT_MOUSE_MOTION (SDL_EVENT_USER_DEFINED+0)
     #define SDL_EVENT_MOUSE_WHEEL  (SDL_EVENT_USER_DEFINED+1)
-    #define SDL_EVENT_DISP_SELECT  (SDL_EVENT_USER_DEFINED+2)
     #define SDL_EVENT_STATE_SELECT (SDL_EVENT_USER_DEFINED+3)
     #define SDL_EVENT_GRID_SELECT  (SDL_EVENT_USER_DEFINED+4)
 
-    enum disp {DISP_XY, DISP_XZ, DISP_YZ};
-
     #define STATE_STR \
         (model_is_running() ? "RUNNING" : "STOPPED")
-    #define DISP_STR \
-        (vars->disp == DISP_XY ? "XY" : vars->disp == DISP_XZ ? "XZ" : vars->disp == DISP_YZ ? "YZ"  : "??")
 
     struct {
         float x_offset;
         float y_offset;
         float width;
         float meters_per_pixel;
-        int64_t updates;
         bool grid;
-        enum disp disp;
-        uint64_t time_us_last;
-        double time_secs_last;
-        float metric;
+        double time_wall_secs_last;
+        double time_model_secs_last;
+        float model_secs_per_wall_sec;
     } * vars = pane_cx->vars;
     rect_t * pane = &pane_cx->pane;
 
@@ -180,12 +173,10 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         vars->y_offset = 0;
         vars->width = params.chamber_radius * 2;
         vars->meters_per_pixel = vars->width / pane->w;
-        vars->updates = 0;
         vars->grid = false;
-        vars->disp = DISP_XY;
-        vars->time_us_last = 0;
-        vars->time_secs_last = 0;
-        vars->metric = 0;
+        vars->time_wall_secs_last = 0;
+        vars->time_model_secs_last = 0;
+        vars->model_secs_per_wall_sec = 0;
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -195,7 +186,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
 
     if (request == PANE_HANDLER_REQ_RENDER) {
 
-        // render the points; use vars->disp to select the orientation
+        // render the points
         {
         #define MAX_POINTS 1000
         #define POINT_SIZE 1
@@ -214,26 +205,13 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
 
                 // xxx max_cell must be even  ??
                 // xxx also c+1
-                // xxx or don't bother with different orientations
-                c = (vars->disp == DISP_XY ? &cell[idx1][idx2][MAX_CELL/2] :
-                     vars->disp == DISP_XZ ? &cell[idx1][MAX_CELL/2][idx2] :
-                                             &cell[MAX_CELL/2][idx1][idx2]);
+                c = &cell[idx1][idx2][MAX_CELL/2];
 
                 // xxx this needs locking
                 LIST_FOREACH(p, &c->particle_list_head, cell_entries) {
-                    if (vars->disp == DISP_XY) {
-                        x = pane->w/2 + (p->x + vars->x_offset) / vars->meters_per_pixel; 
-                        y = pane->h/2 + (p->y + vars->y_offset) / vars->meters_per_pixel;
-                        // xxx assert(p->z >= 0 && p->z < CELL_SIZE);
-                    } else if (vars->disp == DISP_XZ) {
-                        x = pane->w/2 + (p->x + vars->x_offset) / vars->meters_per_pixel; 
-                        y = pane->h/2 + (p->z + vars->y_offset) / vars->meters_per_pixel;
-                        assert(p->y >= 0 && p->y < CELL_SIZE);
-                    } else {  // vars->disp == YZ
-                        x = pane->w/2 + (p->y + vars->x_offset) / vars->meters_per_pixel; 
-                        y = pane->h/2 + (p->z + vars->y_offset) / vars->meters_per_pixel;
-                        assert(p->x >= 0 && p->x < CELL_SIZE);
-                    }
+                    x = pane->w/2 + (p->x + vars->x_offset) / vars->meters_per_pixel; 
+                    y = pane->h/2 + (p->y + vars->y_offset) / vars->meters_per_pixel;
+                    // xxx assert(p->z >= 0 && p->z < CELL_SIZE);
 
                     if (!p->ion) {
                         points_atom[max_points_atom].x = x;
@@ -265,7 +243,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         }
         }
 
-        // render the grid
+        // if the grid enabled hen render the grid
         {
         float x, y, tmp, r, r_squared;
         r = params.chamber_radius;
@@ -298,7 +276,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         }
         }
 
-        // render the chamber and grid
+        // render circles to represent the chamber and grid
         {
         sdl_render_circle(pane, 
                           pane->w/2 + vars->x_offset / vars->meters_per_pixel,
@@ -311,47 +289,46 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
                           params.grid_radius / vars->meters_per_pixel, 2, WHITE);
         }
 
-        // xxx metric
-        uint64_t time_us_now = microsec_timer();
+        // determine the model progress rate, model_secs_per_wall_sec
         if (model_is_running()) {
-            if (time_us_now - vars->time_us_last > 1000000) {
-                if (vars->time_us_last != 0) {
-                    vars->metric = ((time_secs - vars->time_secs_last) * 1e9) / 
-                                   ((time_us_now - vars->time_us_last) / 1e6);
-                }
-                vars->time_us_last = time_us_now;
-                vars->time_secs_last = time_secs;
+            double time_wall_secs = microsec_timer() / 1000000.;
+            if (vars->time_wall_secs_last == 0) {
+                vars->time_wall_secs_last = time_wall_secs;
+                vars->time_model_secs_last = time_model_secs;
+            } else if (time_wall_secs - vars->time_wall_secs_last > 1) {
+                vars->model_secs_per_wall_sec = 
+                    (time_model_secs - vars->time_model_secs_last)  / 
+                    (time_wall_secs - vars->time_wall_secs_last);
+                vars->time_wall_secs_last = time_wall_secs;
+                vars->time_model_secs_last = time_model_secs;
             }
         } else {
-            vars->time_us_last = time_us_now;
-            vars->time_secs_last = time_secs;
-            vars->metric = 0;
+            vars->time_wall_secs_last = 0;
+            vars->time_model_secs_last = 0;
+            vars->model_secs_per_wall_sec = 0;
         }
-
 
         // render the controls and status
         {
-        rect_t  locf = {0,0,pane->w,pane->h};
+        char   str[100];
+        rect_t locf = {0,0,pane->w,pane->h};
+        // status
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(0,1), 1, WHITE, BLACK, 
+            "T = %.3f us", time_model_secs*1e6);
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(1,1), 1, WHITE, BLACK, 
+            "W = %.3f m", vars->width); 
+        sprintf(str, "%.3f us/s", vars->model_secs_per_wall_sec*1e6);
+        sdl_render_text(pane, COL2X(-strlen(str),1), ROW2Y(0,1), 1, str, WHITE, BLACK);
+        // controls
         sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_TYPE_MOUSE_MOTION, pane_cx);
         sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
-
-        sdl_render_printf(pane, 0, -9, 0, WHITE, BLACK, 
-            "%9ld", ++vars->updates);
-        sdl_render_printf(pane, 1, -9, 0, WHITE, BLACK, 
-            "%9lf", vars->metric);
-
-        sdl_render_printf(pane, 0, 0, 0, WHITE, BLACK, 
-            "T = %.3lf us", time_secs*1000000.);
-        sdl_render_printf(pane, 1, 0, 0, WHITE, BLACK, 
-            "W = %0.3f m", vars->width); 
-        sdl_render_text_and_register_event(pane, 2, 0, 0, STATE_STR, LIGHT_BLUE, BLACK, 
+        sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(2,1), 1, STATE_STR, LIGHT_BLUE, BLACK, 
             SDL_EVENT_STATE_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        sdl_render_text_and_register_event(pane, 3, 0, 0, "GRID", LIGHT_BLUE, BLACK, 
+        sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(3,1), 1, "GRID", LIGHT_BLUE, BLACK, 
             SDL_EVENT_GRID_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        sdl_render_text_and_register_event(pane, 4, 0, 0, DISP_STR, LIGHT_BLUE, BLACK, 
-            SDL_EVENT_DISP_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
 
+        // return
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -372,9 +349,6 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
                 vars->width *= 1.1;
             }
             vars->meters_per_pixel = vars->width / pane->w;
-            return PANE_HANDLER_RET_DISPLAY_REDRAW;
-        case SDL_EVENT_DISP_SELECT:
-            vars->disp = (vars->disp + 1) % 3;
             return PANE_HANDLER_RET_DISPLAY_REDRAW;
         case SDL_EVENT_STATE_SELECT:
             if (model_is_running()) {
@@ -425,15 +399,15 @@ static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * in
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        sdl_render_printf(pane, 0, 0, 0, WHITE, BLACK, 
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(0,1), 1, WHITE, BLACK, 
             "chamber_radius   = %0.3f m", params.chamber_radius);
-        sdl_render_printf(pane, 1, 0, 0, WHITE, BLACK, 
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(1,1), 1, WHITE, BLACK, 
             "grid_radius      = %0.3f m", params.grid_radius);
-        sdl_render_printf(pane, 2, 0, 0, WHITE, BLACK, 
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(2,1), 1, WHITE, BLACK, 
             "chamber_pressure = %0.3f pascal", params.chamber_pressure);
-        sdl_render_printf(pane, 3, 0, 0, WHITE, BLACK, 
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(3,1), 1, WHITE, BLACK, 
             "grid_voltage     = %0.0f V", params.grid_voltage);
-        sdl_render_printf(pane, 4, 0, 0, WHITE, BLACK, 
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(4,1), 1, WHITE, BLACK, 
             "grid_current     = %0.3f A", params.grid_current);
         return PANE_HANDLER_RET_NO_ACTION;
     }

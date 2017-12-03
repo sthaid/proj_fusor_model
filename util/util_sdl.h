@@ -47,6 +47,10 @@ SOFTWARE.
 // number of bytes per pixel
 #define BYTES_PER_PIXEL   4
 
+// xxx
+#define COL2X(c,fid)   ((c) * sdl_font_char_width(fid))
+#define ROW2Y(r,fid)   ((r) * sdl_font_char_height(fid))
+
 // rectangle
 typedef struct {
     int16_t x, y;
@@ -192,7 +196,7 @@ int32_t sdl_font_char_height(int32_t fid);
 
 // event support
 void sdl_register_event(rect_t * pane, rect_t * loc, int32_t event_id, int32_t event_type, void * event_cx);
-void sdl_render_text_and_register_event(rect_t * pane, int32_t row, int32_t col, int32_t font_id, char * str, 
+void sdl_render_text_and_register_event(rect_t * pane, int32_t x, int32_t y, int32_t font_id, char * str, 
         int32_t fg_color, int32_t bg_color, int32_t event_id, int32_t event_type, void * event_cx);
 void sdl_render_texture_and_register_event(rect_t * pane, int32_t x, int32_t y,
         texture_t texture, int32_t event_id, int32_t event_type, void * event_cx);
@@ -200,9 +204,9 @@ sdl_event_t * sdl_poll_event(void);
 void sdl_play_event_sound(void);
 
 // render text
-rect_t sdl_render_text(rect_t * pane, int32_t row, int32_t col, int32_t font_id, char * str, 
+rect_t sdl_render_text(rect_t * pane, int32_t x, int32_t y, int32_t font_id, char * str, 
             int32_t fg_color, int32_t bg_color);
-void sdl_render_printf(rect_t * pane, int32_t row, int32_t col, int32_t font_id, 
+void sdl_render_printf(rect_t * pane, int32_t x, int32_t y, int32_t font_id, 
             int32_t fg_color, int32_t bg_color, char * fmt, ...) __attribute__ ((format (printf, 7, 8)));
 
 // render rectangle, lines, circles, points

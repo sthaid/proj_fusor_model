@@ -194,53 +194,53 @@ static int32_t pane_handler_demo(pane_cx_t * pane_cx, int32_t request, void * in
 
         // display update_counter and pane instance
         vars->update_counter++;
-        sdl_render_printf(pane, 0, 0, 0, WHITE, BLACK, "%d %d", 
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(0,1), 1, WHITE, BLACK, "%d %d", 
             vars->update_counter, vars->instance);
 
         // keyboard test
-        sdl_render_printf(pane, 1, 0, 0, WHITE, BLACK, "KEY 0x%x '%c'", 
+        sdl_render_printf(pane, COL2X(0,1), ROW2Y(1,1), 1, WHITE, BLACK, "KEY 0x%x '%c'", 
             vars->key_event_id, vars->key_event_id ? vars->key_event_id : ' ');
 
         // 'MOUSE_CLICK' will increment counter on click
         sdl_render_text_and_register_event(
-            pane, 3, 0, 0, "MOUSE_CLICK", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(3,1), 1, "MOUSE_CLICK", LIGHT_BLUE, BLACK, 
             SDL_EVENT_MOUSE_CLICK, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        sdl_render_printf(pane, 3, 12, 0, WHITE, BLACK, "%d", vars->mouse_click_test_counter);
+        sdl_render_printf(pane, COL2X(12,1), ROW2Y(3,1), 1, WHITE, BLACK, "%d", vars->mouse_click_test_counter);
 
         // 'MOUSE_WHEEL' will adjust counter on mouse wheel 
         sdl_render_text_and_register_event(
-            pane, 4, 0, 0, "MOUSE_WHEEL", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(4,1), 1, "MOUSE_WHEEL", LIGHT_BLUE, BLACK, 
             SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
-        sdl_render_printf(pane, 4, 12, 0, WHITE, BLACK, "%d", vars->mouse_wheel_test_counter);
+        sdl_render_printf(pane, COL2X(12,1), ROW2Y(4,1), 1, WHITE, BLACK, "%d", vars->mouse_wheel_test_counter);
 
         // 'NEW_DEMO_PANE' create another demo pane
         sdl_render_text_and_register_event(
-            pane, 5, 0, 0, "NEW_DEMO_PANE", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(5,1), 1, "NEW_DEMO_PANE", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_DEMO_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // 'NEW_TEXT_PANE' create another text pane
         sdl_render_text_and_register_event(
-            pane, 6, 0, 0, "NEW_TEXT_PANE", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(6,1), 1, "NEW_TEXT_PANE", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_TEXT_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // 'NEW_GRAPH_PANE' create another text pane
         sdl_render_text_and_register_event(
-            pane, 6, 0, 0, "NEW_GRAPH_PANE", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(7,1), 1, "NEW_GRAPH_PANE", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_GRAPH_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // 'NEW_POINTS' create the points test pane
         sdl_render_text_and_register_event(
-            pane, 7, 0, 0, "NEW_POINTS", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(8,1), 1, "NEW_POINTS", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_POINTS_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // 'NEW_LINES' create the lines test pane
         sdl_render_text_and_register_event(
-            pane, 8, 0, 0, "NEW_LINES", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(9,1), 1, "NEW_LINES", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_LINES_PANE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // 'NEW_DISPLAY' chain to another display
         sdl_render_text_and_register_event(
-            pane, 9, 0, 0, "NEW_DISPLAY", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(10,1),  1, "NEW_DISPLAY", LIGHT_BLUE, BLACK, 
             SDL_EVENT_NEW_DISPLAY, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
         // moving circle
@@ -377,9 +377,9 @@ static int32_t pane_handler_points_test(pane_cx_t * pane_cx, int32_t request, vo
         sdl_render_points(pane, vars->points, MAX_POINTS, BLUE, vars->point_size);
 
         sdl_render_text_and_register_event(
-            pane, 0, 0, 0, "POINT_SIZE", LIGHT_BLUE, BLACK, 
+            pane, COL2X(0,1), ROW2Y(0,1), 1, "POINT_SIZE", LIGHT_BLUE, BLACK, 
             SDL_EVENT_SELECT_POINT_SIZE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        sdl_render_printf(pane, 0, 11, 0, WHITE, BLACK, "%d", vars->point_size);
+        sdl_render_printf(pane, COL2X(11,1), ROW2Y(0,1), 1, WHITE, BLACK, "%d", vars->point_size);
 
         return PANE_HANDLER_RET_NO_ACTION;
     }

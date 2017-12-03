@@ -34,15 +34,19 @@ SOFTWARE.
 #include <limits.h>
 #include <assert.h>
 
+#include <math.h>
+
 #include "util_sdl.h"
 #include "util_sdl_predefined_panes.h"
 #include "util_misc.h"
 
-// -----------------  PREDEFINED PANE HANDLERS  -----------------------------
+static char * float2str(float x, int32_t *len);
+
+// -----------------  PREDEFINED PANE HANDLER - DISPLAY TEXT  ---------------
 
 int32_t pane_hndlr_display_text(pane_cx_t * pane_cx, int32_t request, void * init_params, sdl_event_t * event) 
 {
-    #define PIXELS_PER_ROW   (sdl_font_char_height(0))
+    #define PIXELS_PER_ROW   (sdl_font_char_height(1))
 
     #define SDL_EVENT_MOUSE_MOTION   (SDL_EVENT_USER_DEFINED + 0)
     #define SDL_EVENT_MOUSE_WHEEL    (SDL_EVENT_USER_DEFINED + 1)
@@ -73,7 +77,7 @@ int32_t pane_hndlr_display_text(pane_cx_t * pane_cx, int32_t request, void * ini
                 strcpy(line, p);
                 p += strlen(line);
             }
-            vars->texture[vars->max_texture++] = sdl_create_text_texture(WHITE, BLACK, 0, line);
+            vars->texture[vars->max_texture++] = sdl_create_text_texture(WHITE, BLACK, 1, line);
         }
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -164,9 +168,8 @@ int32_t pane_hndlr_display_text(pane_cx_t * pane_cx, int32_t request, void * ini
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-// XXX move this to util_sdl
-// XXX need smaller font
-// XXX review and finish up
+// -----------------  PREDEFINED PANE HANDLER - DISPLAY GRAPH  --------------
+
 int32_t pane_hndlr_display_graph(pane_cx_t * pane_cx, int32_t request, void * init_params, sdl_event_t * event) 
 {
     #define SDL_EVENT_MOUSE_MOTION   (SDL_EVENT_USER_DEFINED + 0)
@@ -188,7 +191,7 @@ int32_t pane_hndlr_display_graph(pane_cx_t * pane_cx, int32_t request, void * in
 
     if (request == PANE_HANDLER_REQ_INITIALIZE) {
         vars = pane_cx->vars = calloc(1,sizeof(*vars));
-        vars->params    = (pane_hndlr_display_graph_params_t**)init_params;
+        vars->params = (pane_hndlr_display_graph_params_t**)init_params;
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -197,60 +200,77 @@ int32_t pane_hndlr_display_graph(pane_cx_t * pane_cx, int32_t request, void * in
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        int32_t xo, xm, yo, ym, title_col, i;  // xxx variable names
         pane_hndlr_display_graph_params_t * params = *vars->params;
+        int32_t i;
+        int32_t xo, xm, yo, ym, xtmp, ytmp;      // these are pixel units
+        int32_t fw0 = sdl_font_char_width(0);    // font 0 width, pixel units
+        int32_t fh0 = sdl_font_char_height(0);   // font 0 height, pixel units
+        int32_t fw1 = sdl_font_char_width(1);    // font 1 width, pixel units
 
         // if no params then return
         if (params == NULL) {
             return PANE_HANDLER_RET_NO_ACTION;
         }
 
-        // if params y_min/max don't match vars y_min/max then XXX comment
+        // if params y_min/max don't match vars y_min_orig/max then
         // reset vars y_min/max (this should not usually happen)
         if (params->y_min != vars->y_min_orig || params->y_max != vars->y_max_orig) {
-            INFO("XXXXXXXXXXXXXXXXXX CALLER RESET ymin/max  %f %f\n", params->y_min, params->y_max);
             vars->y_min_orig = params->y_min;
             vars->y_max_orig = params->y_max;
             vars->y_min = params->y_min;
             vars->y_max = params->y_max;
-// XXX treet xmin max same
         }
 
         // init variables that define the location of the x,y axis
-        xo = 6 * sdl_font_char_width(0) + 2;  // xxx names
+        xo = 7 * fw0;       // reserve 7 font0 chars to the left of the y axis
         xm = pane->w - 1;
-        yo = pane->h - sdl_font_char_height(0) - 2;
-        ym = sdl_font_char_height(0);
+        yo = pane->h - fh0; // reserve 1 font0 char at the botton of the pane
+        ym = fh0;           // reserve 1 font0 char at the top of the pane
 
-        // render the x/y axis, title, units, and scale
-//locate y intercept for x == 0
-//only if in range
+        // render the x and y axis;
+        // if the x_axis is off the pane then it is not rendered
         if (vars->y_min <= 0 && vars->y_max >= 0) {
-            int32_t YYY =  yo + (0 - vars->y_min) * ((ym - yo) / (vars->y_max - vars->y_min));
-            sdl_render_line(pane, xo, YYY, xm, YYY, WHITE);
+            ytmp =  yo + (0 - vars->y_min) * ((ym - yo) / (vars->y_max - vars->y_min));
+            sdl_render_line(pane, xo, ytmp, xm, ytmp, WHITE);
         }
-
         sdl_render_line(pane, xo, yo, xo, ym, WHITE);
 
-        title_col = (pane->w / sdl_font_char_width(0) - strlen(params->title_str)) / 2;
-        sdl_render_printf( pane, 0, title_col, 0, WHITE, BLACK, "%s", params->title_str);
-        // XXX etc
+        // render title
+        xtmp = (pane->w - strlen(params->title_str) * fw1) / 2;
+        sdl_render_printf(pane, xtmp, 0,      1, WHITE, BLACK, "%s", params->title_str);
+
+        // render x-axis min, max, and units
+        sdl_render_printf(pane, xo, yo,       0, WHITE, BLACK, "%s", float2str(params->x_min, NULL));
+        sdl_render_printf(pane, xm-7*fw0, yo, 0, WHITE, BLACK, "%7s", float2str(params->x_max, NULL));
+        xtmp = xo + ((xm-xo) - strlen(params->x_units_str)*fw0) / 2;
+        sdl_render_printf(pane, xtmp, yo, 0, WHITE, BLACK, "%s", params->x_units_str);
+
+        // render y-axis min, max, and units
+        sdl_render_printf(pane, 0, yo-fh0,    0, WHITE, BLACK, "%7s", float2str(vars->y_min, NULL));
+        sdl_render_printf(pane, 0, ym,        0, WHITE, BLACK, "%7s", float2str(vars->y_max, NULL));
+        if (strlen(params->y_units_str) <= 7) {
+            xtmp = 0 + (7*fw0 - strlen(params->y_units_str)*fw0) / 2;
+        } else {
+            xtmp = 0;
+        }
+        ytmp = (ym + yo) / 2 - fh0 / 2;
+        sdl_render_printf(pane, xtmp, ytmp,   0, WHITE, BLACK, "%s", params->y_units_str);
 
         // render the graph
         point_t points[params->max_points];
         int32_t max_points = 0;
-        for (i = 0; i < params->max_points; i++) {  // XXX vvv optimize
+        float x_scale_factor = (xm - xo) / (params->x_max - params->x_min);
+        float y_scale_factor = (ym - yo) / (vars->y_max - vars->y_min);
+        for (i = 0; i < params->max_points; i++) {
             float x = params->points[i].x;
             float y = params->points[i].y;
-            if (x < params->x_min || x > params->x_max ||
-                y < vars->y_min || y > vars->y_max) 
-            {
+            if (x < params->x_min || x > params->x_max || y < vars->y_min || y > vars->y_max) {
                 sdl_render_lines(pane, points, max_points, WHITE);
                 max_points = 0;
                 continue;
             }
-            points[max_points].x =  xo + (x - params->x_min) * ((xm - xo) / (params->x_max - params->x_min));
-            points[max_points].y =  yo + (y - vars->y_min) * ((ym - yo) / (vars->y_max - vars->y_min));
+            points[max_points].x =  xo + (x - params->x_min) * x_scale_factor;
+            points[max_points].y =  yo + (y - vars->y_min) * y_scale_factor;
             max_points++;
         }
         sdl_render_lines(pane, points, max_points, WHITE);
@@ -259,10 +279,10 @@ int32_t pane_hndlr_display_graph(pane_cx_t * pane_cx, int32_t request, void * in
         rect_t loc = {0,0,pane->w,pane->h};
         sdl_register_event(pane, &loc, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_TYPE_MOUSE_MOTION, pane_cx);
         sdl_register_event(pane, &loc, SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
-        sdl_render_text_and_register_event(pane, 0, -1, 0, "R", LIGHT_BLUE, BLACK,
+        sdl_render_text_and_register_event(pane, COL2X(-1,1), ROW2Y(0,1), 1, "R", LIGHT_BLUE, BLACK,
                                            SDL_EVENT_RESET_GRAPH, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
 
-
+        // return
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -270,8 +290,6 @@ int32_t pane_hndlr_display_graph(pane_cx_t * pane_cx, int32_t request, void * in
     // -------- EVENT --------
     // -----------------------
 
-    // xxx change y scale with wheel
-    // xxx and a RESET button to reset the scale
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch (event->event_id) {
         case SDL_EVENT_MOUSE_MOTION: {
@@ -283,20 +301,13 @@ int32_t pane_hndlr_display_graph(pane_cx_t * pane_cx, int32_t request, void * in
             return PANE_HANDLER_RET_DISPLAY_REDRAW; }
         case SDL_EVENT_MOUSE_WHEEL: {
             float factor = (event->mouse_motion.delta_y > 0 ? 1.1 : (1. / 1.1));
-            //if (vars->y_min <= 0 && vars->y_max >= 0) {
-                vars->y_min *= factor;
-                vars->y_max *= factor;
-            //} else {
-                //float avg = (vars->y_min + vars->y_max) / 2.;
-                //vars->y_max += (vars->y_max - avg) * factor;
-                //vars->y_min += (vars->y_min - avg) * factor;
-            //}
+            vars->y_min *= factor;
+            vars->y_max *= factor;
             return PANE_HANDLER_RET_DISPLAY_REDRAW; }
         case SDL_EVENT_RESET_GRAPH: {
             vars->y_min = vars->y_min_orig;
             vars->y_max = vars->y_max_orig;
             return PANE_HANDLER_RET_DISPLAY_REDRAW; }
-// XXX need RESET
         }
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -314,3 +325,47 @@ int32_t pane_hndlr_display_graph(pane_cx_t * pane_cx, int32_t request, void * in
     assert(0);
     return PANE_HANDLER_RET_NO_ACTION;
 }
+
+// this routine returns a string that is 7 or less characters;
+// except when x is a small negative number, such as '-1.2e-10'
+// where 8 characters is returned
+//
+// a minimum of 2 significant digits is printed
+//
+// len arg is optional, is supplied then the strlen is returned
+static char * float2str(float x, int32_t *len)
+{
+    static char s[100];
+    float absx = fabsf(x);
+    char * p;
+
+    if ((absx != 0 && absx < .1) || absx >= 1000000) {
+        if ((absx < .1) || (x < 0 && absx >= 1e10)) {
+            sprintf(s, "%.1e", x);
+        } else {
+            sprintf(s, "%.2e", x);
+        }
+        if ((p = strstr(s, "e-0"))) {
+            memmove(p+2, p+3, 10);
+        } else if ((p = strstr(s, "e+0"))) {
+            memmove(p+1, p+3, 10);
+        } else if ((p = strstr(s, "e+"))) {
+            memmove(p+1, p+2, 10);
+        }
+    } else if (absx < 1) {
+        sprintf(s, "%.3f", x);
+    } else if (absx < 10) {
+        sprintf(s, "%.2f", x);
+    } else if (absx < 100) {
+        sprintf(s, "%.1f", x);
+    } else {
+        sprintf(s, "%.0f", x);
+    }
+
+    if (len) {
+        *len = strlen(s);
+    }
+
+    return s;
+}
+

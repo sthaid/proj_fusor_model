@@ -96,7 +96,7 @@ cell_t       cell[MAX_CELL][MAX_CELL][MAX_CELL];
 float        num_real_particles_in_cell;
 float        num_real_particles_per_sim_particle;
 
-double       time_secs;
+double       time_model_secs;
 
 //
 // PROTOTYPES
