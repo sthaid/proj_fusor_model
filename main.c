@@ -290,6 +290,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         }
 
         // determine the model progress rate, model_secs_per_wall_sec
+        // XXX smoother, running avg ?
         if (model_is_running()) {
             double time_wall_secs = microsec_timer() / 1000000.;
             if (vars->time_wall_secs_last == 0) {
@@ -317,8 +318,10 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
             "T = %.3f us", time_model_secs*1e6);
         sdl_render_printf(pane, COL2X(0,1), ROW2Y(1,1), 1, WHITE, BLACK, 
             "W = %.3f m", vars->width); 
-        sprintf(str, "%.3f us/s", vars->model_secs_per_wall_sec*1e6);
-        sdl_render_text(pane, COL2X(-strlen(str),1), ROW2Y(0,1), 1, str, WHITE, BLACK);
+        if (vars->model_secs_per_wall_sec != 0) {
+            sprintf(str, "%.3f us/s", vars->model_secs_per_wall_sec*1e6);
+            sdl_render_text(pane, COL2X(-strlen(str),1), ROW2Y(0,1), 1, str, WHITE, BLACK);
+        }
         // controls
         sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_MOTION, SDL_EVENT_TYPE_MOUSE_MOTION, pane_cx);
         sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
@@ -437,7 +440,19 @@ static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * in
 // XXX continue here
 static void display_start(void * display_cx)
 {
-    model_get_data(&graph1);
+    bool running = model_is_running();
+
+    if (running) {
+        model_stop();
+        DEBUG("STOP\n");
+    }
+
+    // XXX gather data
+
+    if (running) {
+        model_start();
+        DEBUG("START\n");
+    }
 }
 
 static void display_end(void * display_cx)

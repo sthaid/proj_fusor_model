@@ -34,6 +34,11 @@
 // misc
 #define MB 0x100000
 
+// model state
+#define STATE_STOPPED     0
+#define STATE_RUNNING     1
+#define STATE_NO_REQUEST  2
+
 // 
 // typedefs
 //
@@ -42,9 +47,15 @@
 // variables
 //
 
-static bool run_request;
-static volatile bool running;
+static int32_t         model_state = STATE_STOPPED;
+static int32_t         model_state_request = STATE_NO_REQUEST;
+static pthread_cond_t  model_state_request_cond = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t  model_state_changed_cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t model_state_request_cond_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t model_state_changed_cond_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static bool model_thread_started;
+
 static float roomtemp_d_velocity;
 static float roomtemp_d_velocity_squared;
  
@@ -334,60 +345,34 @@ static void init_particle(particle_t * p)
 
 void model_start(void)
 {
-    // set run_request flag, and wait for ack
-    run_request = true;
-    while (!running) {
-        usleep(1000);
+    pthread_mutex_lock(&model_state_changed_cond_mutex);
+    model_state_request = STATE_RUNNING;
+    pthread_cond_signal(&model_state_request_cond);
+    while (model_state != STATE_RUNNING) {
+        pthread_cond_wait(&model_state_changed_cond, &model_state_changed_cond_mutex);
     }
+    pthread_mutex_unlock(&model_state_changed_cond_mutex);
 }
 
 void model_stop(void)
 {
-    // clear run_request flag, and wait for ack
-    run_request = false;
-    while (running) {
-        usleep(1000);
+    pthread_mutex_lock(&model_state_changed_cond_mutex);
+    model_state_request = STATE_STOPPED;
+    pthread_cond_signal(&model_state_request_cond);
+    while (model_state != STATE_STOPPED) {
+        pthread_cond_wait(&model_state_changed_cond, &model_state_changed_cond_mutex);
     }
+    pthread_mutex_unlock(&model_state_changed_cond_mutex);
 }
 
 bool model_is_running(void) 
 {
-    return running;
+    return (model_state == STATE_RUNNING);
 }
 
 void model_terminate(void)
 {
     model_stop();
-}
-
-// XXX much more work here
-void model_get_data(pane_hndlr_display_graph_params_t ** graph_temp)
-{
-    pane_hndlr_display_graph_params_t *g;
-    int32_t max_points_needed = 360;
-    int32_t i;
-
-    if (*graph_temp == NULL || (*graph_temp)->max_points_alloced < max_points_needed) {
-        INFO("XXXXXXXXXXXXXXXX ALLOCING \n");
-        *graph_temp = malloc(sizeof(pane_hndlr_display_graph_params_t) +
-                             max_points_needed * sizeof(struct pane_hndlr_display_graph_point_s));
-        g = *graph_temp;
-        strcpy(g->title_str, "TITLE");
-        strcpy(g->x_units_str, "X_UNIT");
-        strcpy(g->y_units_str, "Y_UNIT");
-        g->x_min = 0;
-        g->x_max = 2 * M_PI;
-        g->y_min = -1;
-        g->y_max = 1;
-        g->max_points_alloced = max_points_needed;
-    }
-
-    g = *graph_temp;
-    for (i = 0; i < max_points_needed; i++) {
-        g->points[i].x = i*(2*M_PI/360);
-        g->points[i].y = sin(i*(2*M_PI/360));
-    }
-    g->max_points = max_points_needed;
 }
 
 // -----------------  MODEL_THREAD  ----------------------------------------------------------
@@ -418,12 +403,19 @@ static void * model_thread(void * cx)
     model_thread_started = true;
 
     while (true) {
-        // wait for run_request to be set
-        while (run_request == false) {
-            running = false;
-            usleep(1000);
+        // process model state change request (to stop or run the model);
+        // if the model is stopped then remain in this code block until 
+        // the model state is set to running
+        while (model_state == STATE_STOPPED || model_state_request != STATE_NO_REQUEST) {
+            pthread_mutex_lock(&model_state_request_cond_mutex);
+            while (model_state_request == STATE_NO_REQUEST) {
+                pthread_cond_wait(&model_state_request_cond, &model_state_request_cond_mutex);
+            }
+            model_state = model_state_request;
+            model_state_request = STATE_NO_REQUEST;
+            pthread_cond_signal(&model_state_changed_cond);
+            pthread_mutex_unlock(&model_state_request_cond_mutex);
         }
-        running = true;
 
         // process the particles on this list;
         // when done all particles will have been moved to other work lists

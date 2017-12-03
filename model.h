@@ -27,7 +27,7 @@
 #define MAX_SHELL                   100       // MAX_CHAMBER_RADIUS / SHELL_SIZE
 
 // particles
-#define AVG_SIM_PARTICLES_PER_CELL  1 // 10.0   XXX
+#define AVG_SIM_PARTICLES_PER_CELL  10. // 10.0   XXX
 #define MAX_CHAMBER_CELLS           4200000   // (4/3 * PI * MAX_CHAMBER_RADIUS^3) / CELL_VOLUME
 #define MAX_PARTICLES               42000000  // MAX_CHAMBER_CELLS * AVG_SIM_PARTICLES_PER_CELL)
 
@@ -108,6 +108,5 @@ void model_start(void);
 void model_stop(void);
 bool model_is_running(void);
 void model_terminate(void);
-void model_get_data(pane_hndlr_display_graph_params_t ** graph_temp); // xxx
 
 #endif
