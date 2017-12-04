@@ -73,6 +73,7 @@ typedef struct shell_s {
     float   volume;
     int32_t number_of_atoms;
     int32_t number_of_ions;
+    double  sum_v_squared;
     int64_t ionization_event_count;
     int64_t recombination_event_count;
     int64_t fusion_event_count;

@@ -20,6 +20,7 @@
 #include "util_misc.h"
 
 #include "model.h"
+#include "physics.h"
 
 //
 // defines
@@ -36,7 +37,8 @@
 // variables
 //
 
-pane_hndlr_display_graph_params_t * graph1; // xxx name
+pane_hndlr_display_graph_params_t * gr_temperature;
+pane_hndlr_display_graph_params_t * gr_nd_atoms;    
 
 //
 // prototypes
@@ -121,10 +123,11 @@ int main(int argc, char **argv)
         display_start,  // called prior to pane handlers
         display_end,    // called after pane handlers
         250000,         // 0=continuous, -1=never, else us 
-        3,              // number of pane handler varargs that follow
+        4,              // number of pane handler varargs that follow
         pane_hndlr_chamber, NULL,     0,   0, 800, 800, PANE_BORDER_STYLE_MINIMAL,
         pane_hndlr_params,  NULL,     0, 800, 800, 200, PANE_BORDER_STYLE_MINIMAL,
-        pane_hndlr_display_graph,  &graph1, 800,   0, 550, 300, PANE_BORDER_STYLE_MINIMAL);
+        pane_hndlr_display_graph,  &gr_temperature, 800,   0, 550, 200, PANE_BORDER_STYLE_MINIMAL,
+        pane_hndlr_display_graph,  &gr_nd_atoms,    800, 200, 550, 200, PANE_BORDER_STYLE_MINIMAL);
 
     // terminate the model
     model_terminate();
@@ -290,7 +293,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         }
 
         // determine the model progress rate, model_secs_per_wall_sec
-        // XXX smoother, running avg ?
+        // xxx smoother, running avg ?
         if (model_is_running()) {
             double time_wall_secs = microsec_timer() / 1000000.;
             if (vars->time_wall_secs_last == 0) {
@@ -441,17 +444,81 @@ static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * in
 static void display_start(void * display_cx)
 {
     bool running = model_is_running();
+    pane_hndlr_display_graph_params_t *g;
+    int32_t i, max_points_needed;
+    bool init;
 
+    // xxx overview comment
+
+    // XXX check time since last< don't exceed XXX
+
+    // if the model is running then stop the model so that
+    // model data can be safely gathered
     if (running) {
         model_stop();
-        DEBUG("STOP\n");
     }
 
-    // XXX gather data
+    // XXX particle pancake data 
 
+    // graph x=radius y=temperature  
+    init = false;
+    max_points_needed = max_shell;
+    if (gr_temperature == NULL || (gr_temperature)->max_points_alloced < max_points_needed) {
+        free(gr_temperature);
+        gr_temperature = 
+            malloc(sizeof(pane_hndlr_display_graph_params_t) +
+                   max_points_needed * sizeof(struct pane_hndlr_display_graph_point_s));
+        init = true;
+    }
+    g = gr_temperature;
+    if (init) {
+        strcpy(g->title_str, "TEMPERATURE");
+        strcpy(g->x_units_str, "METERS");
+        strcpy(g->y_units_str, "K");
+        g->x_min = 0;
+        g->x_max = max_shell * SHELL_SIZE;
+        g->y_min = 0;
+        g->y_max = 600;
+        g->max_points_alloced = max_points_needed;
+    }
+    for (i = 0; i < max_points_needed; i++) {
+        double avg_v_squared = shell[i].sum_v_squared / (shell[i].number_of_atoms + shell[i].number_of_ions);
+        double temperature = V_SQUARED_TO_TEMPERATURE(avg_v_squared,D_MASS);
+        g->points[i].x = i * SHELL_SIZE;
+        g->points[i].y = temperature;
+    }
+    g->max_points = max_points_needed;
+
+    // graph x=radius y=nd_atoms  
+    init = false;
+    max_points_needed = max_shell;
+    if (gr_nd_atoms == NULL || (gr_nd_atoms)->max_points_alloced < max_points_needed) {
+        free(gr_nd_atoms);
+        gr_nd_atoms = 
+            malloc(sizeof(pane_hndlr_display_graph_params_t) +
+                   max_points_needed * sizeof(struct pane_hndlr_display_graph_point_s));
+        init = true;
+    }
+    g = gr_nd_atoms;
+    if (init) {
+        strcpy(g->title_str, "ND_ATOMS");
+        strcpy(g->x_units_str, "METERS");
+        strcpy(g->y_units_str, "/M^3");
+        g->x_min = 0;
+        g->x_max = max_shell * SHELL_SIZE;
+        g->y_min = 0;
+        g->y_max = 2e21;  // xxx calc from pressure, etc
+        g->max_points_alloced = max_points_needed;
+    }
+    for (i = 0; i < max_points_needed; i++) {
+        g->points[i].x = i * SHELL_SIZE;
+        g->points[i].y = shell[i].number_of_atoms * num_real_particles_per_sim_particle / shell[i].volume;
+    }
+    g->max_points = max_points_needed;
+
+    // if was running then resume the model
     if (running) {
         model_start();
-        DEBUG("START\n");
     }
 }
 

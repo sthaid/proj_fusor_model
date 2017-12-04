@@ -58,6 +58,8 @@ static bool model_thread_started;
 
 static float roomtemp_d_velocity;
 static float roomtemp_d_velocity_squared;
+static float hightemp_d_velocity;           // xxx not needed later
+static float hightemp_d_velocity_squared;   // xxx not needed later
  
 //
 // prototypes
@@ -261,6 +263,8 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
     // init global variables for the kinetic velocity of D atoms at room temp
     roomtemp_d_velocity = TEMPERATURE_TO_VELOCITY(ROOM_TEMPERATURE_K, D_MASS);
     roomtemp_d_velocity_squared = roomtemp_d_velocity * roomtemp_d_velocity;
+    hightemp_d_velocity = TEMPERATURE_TO_VELOCITY(ROOM_TEMPERATURE_K, D_MASS);  // XXX make x2
+    hightemp_d_velocity_squared = hightemp_d_velocity * hightemp_d_velocity;
 
     // init particles
     int32_t i;
@@ -282,6 +286,7 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
 
     // debug print 
     DEBUG("roomtemp_d_velocity = %f\n", roomtemp_d_velocity);
+    DEBUG("hightemp_d_velocity = %f\n", hightemp_d_velocity);
     DEBUG("num_cell_in_chamber = %d\n", num_cell_in_chamber);
     DEBUG("max_particles       = %d\n", max_particles);
     DEBUG("max_shell           = %d\n", max_shell);
@@ -339,6 +344,7 @@ static void init_particle(particle_t * p)
 
     // updata shell info associated with this particle
     c->shell->number_of_atoms++;
+    c->shell->sum_v_squared += p->v_squared;
 }
 
 // -----------------  MODEL CONTROL API  -------------------------------------------------
@@ -377,7 +383,7 @@ void model_terminate(void)
 
 // -----------------  MODEL_THREAD  ----------------------------------------------------------
 
-#define MAX_WORK_LIST_HEAD 5000
+#define MAX_WORK_LIST_HEAD 10000
 
 static LIST_HEAD(wlh_s, particle_s) work_list_head[MAX_WORK_LIST_HEAD];
 static int32_t wlh_idx;
@@ -446,14 +452,18 @@ static void schedule_work(particle_t *p, float delta_t)
 
     // add p to work list delta_t in the future
     n = delta_t / MODEL_TIME_INCREMENT;
-    assert(n < MAX_WORK_LIST_HEAD);
+    if (n >= MAX_WORK_LIST_HEAD) {
+        ERROR("XXXXXXXXXXXXXXXXXXXXX n = %d\n", n);
+        n = MAX_WORK_LIST_HEAD-1;
+    }
+    // xxx assert(n < MAX_WORK_LIST_HEAD);
     future_wlh = &work_list_head[(wlh_idx + n) % MAX_WORK_LIST_HEAD];
     LIST_INSERT_HEAD(future_wlh, p, work_entries);
 }
 
 static void process_particle(particle_t *p)
 {
-    float t, x, y, z, vx, vy, vz, nd, mfp, f, new_v, new_v_squared;
+    float t, x, y, z, vx, vy, vz, nd, mfp, f, new_v, new_v_squared, p_orig_v_squared;
     cell_t *cur_cell, * new_cell;
     shell_t *cur_shell, *new_shell;
     particle_t *ptgt;
@@ -480,23 +490,32 @@ static void process_particle(particle_t *p)
     // - return
     if (new_cell == NULL) {
         while (true) {
-            random_vector(roomtemp_d_velocity, &vx, &vy, &vz);
-            t = .020 / roomtemp_d_velocity;  // xxx tbd, this extends out of chamber
+            // xxx
+            random_vector(hightemp_d_velocity, &vx, &vy, &vz);
+            t = .020 / hightemp_d_velocity;  // xxx tbd, this extends out of chamber
             x = p->x + vx * t;
             y = p->y + vy * t;
             z = p->z + vz * t;
-            if (get_cell(x, y, z) != NULL) {
-                p->vx = vx;
-                p->vy = vy;
-                p->vz = vz;
-                p->v = roomtemp_d_velocity;
-                p->v_squared = roomtemp_d_velocity_squared;
-                p->time_last_processed = time_model_secs;
-                nd = cur_shell->number_of_atoms * num_real_particles_per_sim_particle / cur_shell->volume;
-                mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
-                schedule_work(p, mfp/p->v); 
-                return;
+
+            // xxx
+            if (get_cell(x, y, z) == NULL) {
+                continue;
             }
+
+            // xxx
+            cur_shell->sum_v_squared += (hightemp_d_velocity_squared - p->v_squared);
+
+            // xxx
+            p->vx = vx;
+            p->vy = vy;
+            p->vz = vz;
+            p->v = hightemp_d_velocity;
+            p->v_squared = hightemp_d_velocity_squared;
+            p->time_last_processed = time_model_secs;
+            nd = cur_shell->number_of_atoms * num_real_particles_per_sim_particle / cur_shell->volume;
+            mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
+            schedule_work(p, mfp/p->v); 
+            return;
         }
     }
 
@@ -518,9 +537,12 @@ static void process_particle(particle_t *p)
     } else {
         notokay++;
     }
-    if ((okay % 1000000) == 0) {
+    if ((okay % 100000000) == 0) {
         DEBUG("XXX %12ld %12ld : %f\n", okay, notokay, (double)notokay/okay);
     }
+
+    // xxx comment
+    p_orig_v_squared = p->v_squared;
 
     // both p and ptgt will be given the same velocity, by conservation of energy;
     // determine this new velocity by taking the average of the p and ptgt velocity squared
@@ -533,6 +555,17 @@ static void process_particle(particle_t *p)
     }
 
     // xxx optimize
+    // XXX BUG 
+    //     (gdb) print *new_shell
+    //     $3 = {volume = 7.99999977e-09, number_of_atoms = 0, number_of_ions = 0, sum_v_squared = 91.75, ionization_event_count = 0, 
+    //     recombination_event_count = 0, fusion_event_count = 0}
+    //     (gdb) print  nd
+    //     $4 = 0
+    //     (gdb) print mfp
+    //     $5 = inf
+    //     (gdb) print new_shell-shell
+    //     $6 = 0
+
     nd = new_shell->number_of_atoms * num_real_particles_per_sim_particle / new_shell->volume;
     mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
     t = mfp / new_v;
@@ -553,7 +586,7 @@ static void process_particle(particle_t *p)
         LIST_INSERT_HEAD(&new_cell->particle_list_head, p, cell_entries);
         p->cell = new_cell;
     }
-    schedule_work(p, t);
+    schedule_work(p, t);  // XXX bug t == inf
 
     // update ptgt
     if (ptgt) {
@@ -565,6 +598,15 @@ static void process_particle(particle_t *p)
         ptgt->v_squared = new_v_squared;
         ptgt->time_last_processed = time_model_secs;
         schedule_work(ptgt, t);
+    }
+
+    // update shell
+    // xxx comments
+    if (new_shell != cur_shell) {
+        cur_shell->sum_v_squared -= p_orig_v_squared;
+        new_shell->sum_v_squared += p_orig_v_squared;
+        cur_shell->number_of_atoms--;
+        new_shell->number_of_atoms++;
     }
 }
 
