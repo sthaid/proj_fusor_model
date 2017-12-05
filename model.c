@@ -48,18 +48,16 @@
 //
 
 static int32_t         model_state = STATE_STOPPED;
+static pthread_cond_t  model_state_cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t model_state_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static int32_t         model_state_request = STATE_NO_REQUEST;
 static pthread_cond_t  model_state_request_cond = PTHREAD_COND_INITIALIZER;
-static pthread_cond_t  model_state_changed_cond = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t model_state_request_cond_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t model_state_changed_cond_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t model_state_request_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static bool model_thread_started;
 
 static float roomtemp_d_velocity;
-static float roomtemp_d_velocity_squared;
-static float hightemp_d_velocity;           // xxx not needed later
-static float hightemp_d_velocity_squared;   // xxx not needed later
  
 //
 // prototypes
@@ -262,9 +260,6 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
 
     // init global variables for the kinetic velocity of D atoms at room temp
     roomtemp_d_velocity = TEMPERATURE_TO_VELOCITY(ROOM_TEMPERATURE_K, D_MASS);
-    roomtemp_d_velocity_squared = roomtemp_d_velocity * roomtemp_d_velocity;
-    hightemp_d_velocity = TEMPERATURE_TO_VELOCITY(ROOM_TEMPERATURE_K, D_MASS);  // XXX make x2
-    hightemp_d_velocity_squared = hightemp_d_velocity * hightemp_d_velocity;
 
     // init particles
     int32_t i;
@@ -286,7 +281,6 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
 
     // debug print 
     DEBUG("roomtemp_d_velocity = %f\n", roomtemp_d_velocity);
-    DEBUG("hightemp_d_velocity = %f\n", hightemp_d_velocity);
     DEBUG("num_cell_in_chamber = %d\n", num_cell_in_chamber);
     DEBUG("max_particles       = %d\n", max_particles);
     DEBUG("max_shell           = %d\n", max_shell);
@@ -329,8 +323,8 @@ static void init_particle(particle_t * p)
     p->vx = vx;
     p->vy = vy;
     p->vz = vz;
-    p->v = roomtemp_d_velocity;
-    p->v_squared = roomtemp_d_velocity_squared;
+    p->v = roomtemp_d_velocity;   // xxx use a range Maxwell Boltzman
+    p->v_squared = p->v * p->v;
 
     // init particle cell_entries field,
     // add the particle to the cell that it is contained in
@@ -351,24 +345,30 @@ static void init_particle(particle_t * p)
 
 void model_start(void)
 {
-    pthread_mutex_lock(&model_state_changed_cond_mutex);
+    pthread_mutex_lock(&model_state_request_mutex);
     model_state_request = STATE_RUNNING;
     pthread_cond_signal(&model_state_request_cond);
+    pthread_mutex_unlock(&model_state_request_mutex);
+
+    pthread_mutex_lock(&model_state_mutex);
     while (model_state != STATE_RUNNING) {
-        pthread_cond_wait(&model_state_changed_cond, &model_state_changed_cond_mutex);
+        pthread_cond_wait(&model_state_cond, &model_state_mutex);
     }
-    pthread_mutex_unlock(&model_state_changed_cond_mutex);
+    pthread_mutex_unlock(&model_state_mutex);
 }
 
 void model_stop(void)
 {
-    pthread_mutex_lock(&model_state_changed_cond_mutex);
+    pthread_mutex_lock(&model_state_request_mutex);
     model_state_request = STATE_STOPPED;
     pthread_cond_signal(&model_state_request_cond);
+    pthread_mutex_unlock(&model_state_request_mutex);
+
+    pthread_mutex_lock(&model_state_mutex);
     while (model_state != STATE_STOPPED) {
-        pthread_cond_wait(&model_state_changed_cond, &model_state_changed_cond_mutex);
+        pthread_cond_wait(&model_state_cond, &model_state_mutex);
     }
-    pthread_mutex_unlock(&model_state_changed_cond_mutex);
+    pthread_mutex_unlock(&model_state_mutex);
 }
 
 bool model_is_running(void) 
@@ -413,14 +413,20 @@ static void * model_thread(void * cx)
         // if the model is stopped then remain in this code block until 
         // the model state is set to running
         while (model_state == STATE_STOPPED || model_state_request != STATE_NO_REQUEST) {
-            pthread_mutex_lock(&model_state_request_cond_mutex);
+            int32_t new_state;
+
+            pthread_mutex_lock(&model_state_request_mutex);
             while (model_state_request == STATE_NO_REQUEST) {
-                pthread_cond_wait(&model_state_request_cond, &model_state_request_cond_mutex);
+                pthread_cond_wait(&model_state_request_cond, &model_state_request_mutex);
             }
-            model_state = model_state_request;
+            new_state = model_state_request;
             model_state_request = STATE_NO_REQUEST;
-            pthread_cond_signal(&model_state_changed_cond);
-            pthread_mutex_unlock(&model_state_request_cond_mutex);
+            pthread_mutex_unlock(&model_state_request_mutex);
+
+            pthread_mutex_lock(&model_state_mutex);
+            model_state = new_state;
+            pthread_cond_signal(&model_state_cond);
+            pthread_mutex_unlock(&model_state_mutex);
         }
 
         // process the particles on this list;
@@ -445,25 +451,31 @@ static void * model_thread(void * cx)
 static void schedule_work(particle_t *p, float delta_t)
 {
     struct wlh_s * future_wlh;
+    float nf;
     int32_t n;
 
     // remove p from the work list it is currently on
     LIST_REMOVE(p, work_entries);
 
     // add p to work list delta_t in the future
-    n = delta_t / MODEL_TIME_INCREMENT;
-    if (n >= MAX_WORK_LIST_HEAD) {
-        ERROR("XXXXXXXXXXXXXXXXXXXXX n = %d\n", n);
+    assert(delta_t > 0);
+    nf = delta_t / MODEL_TIME_INCREMENT;
+    if (nf > MAX_WORK_LIST_HEAD-1) {
         n = MAX_WORK_LIST_HEAD-1;
+    } else if (nf < 1) {
+        n = 1;
+    } else {
+        n = nf;
     }
-    // xxx assert(n < MAX_WORK_LIST_HEAD);
+    assert(n >= 1);
+    assert(n <= MAX_WORK_LIST_HEAD-1);
     future_wlh = &work_list_head[(wlh_idx + n) % MAX_WORK_LIST_HEAD];
     LIST_INSERT_HEAD(future_wlh, p, work_entries);
 }
 
 static void process_particle(particle_t *p)
 {
-    float t, x, y, z, vx, vy, vz, nd, mfp, f, new_v, new_v_squared, p_orig_v_squared;
+    float t, x, y, z, nd, mfp, f, new_v, new_v_squared, p_orig_v_squared;
     cell_t *cur_cell, * new_cell;
     shell_t *cur_shell, *new_shell;
     particle_t *ptgt;
@@ -489,34 +501,24 @@ static void process_particle(particle_t *p)
     // - xxx  update the comments here
     // - return
     if (new_cell == NULL) {
-        while (true) {
-            // xxx
-            random_vector(hightemp_d_velocity, &vx, &vy, &vz);
-            t = .020 / hightemp_d_velocity;  // xxx tbd, this extends out of chamber
-            x = p->x + vx * t;
-            y = p->y + vy * t;
-            z = p->z + vz * t;
+        float old_v_squared = p->v_squared;
+        float new_v = roomtemp_d_velocity;    // xxx use range
+        float f = new_v / p->v;
 
-            // xxx
-            if (get_cell(x, y, z) == NULL) {
-                continue;
-            }
+        p->vx = -p->vx * f;
+        p->vy = -p->vy * f;
+        p->vz = -p->vz * f;
+        p->v = new_v;
+        p->v_squared = p->v * p->v;
 
-            // xxx
-            cur_shell->sum_v_squared += (hightemp_d_velocity_squared - p->v_squared);
+        p->time_last_processed = time_model_secs;
 
-            // xxx
-            p->vx = vx;
-            p->vy = vy;
-            p->vz = vz;
-            p->v = hightemp_d_velocity;
-            p->v_squared = hightemp_d_velocity_squared;
-            p->time_last_processed = time_model_secs;
-            nd = cur_shell->number_of_atoms * num_real_particles_per_sim_particle / cur_shell->volume;
-            mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
-            schedule_work(p, mfp/p->v); 
-            return;
-        }
+        nd = cur_shell->number_of_atoms * num_real_particles_per_sim_particle / cur_shell->volume;
+        mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
+        schedule_work(p, mfp/p->v); 
+
+        cur_shell->sum_v_squared += (p->v_squared - old_v_squared);
+        return;
     }
 
     // xxx
@@ -538,7 +540,7 @@ static void process_particle(particle_t *p)
         notokay++;
     }
     if ((okay % 100000000) == 0) {
-        DEBUG("XXX %12ld %12ld : %f\n", okay, notokay, (double)notokay/okay);
+        DEBUG("XXX %12ld %12ld : %f\n", okay, notokay, (float)notokay/okay);
     }
 
     // xxx comment
@@ -568,7 +570,7 @@ static void process_particle(particle_t *p)
 
     nd = new_shell->number_of_atoms * num_real_particles_per_sim_particle / new_shell->volume;
     mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
-    t = mfp / new_v;
+    t = mfp / new_v;  // xxx get 2 new velocities
 
     // update p
     p->x = x;

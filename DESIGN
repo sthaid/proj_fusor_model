@@ -2,6 +2,11 @@
 TODO
 ================
 
+try
+- init all on first wlh
+- reflect off side towards the center
+
+
 sdl
 - locking so alt x and arrows is blocked
 - render start and complete callbacks

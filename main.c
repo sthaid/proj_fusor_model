@@ -33,10 +33,21 @@
 // typedefs
 //
 
+typedef struct {
+    int32_t max;
+    int32_t max_alloced;
+    struct loc_s {
+        float x;
+        float y;
+    } loc[0];
+} particle_location_t;
+
 //
 // variables
 //
 
+particle_location_t               * loc_atoms;
+particle_location_t               * loc_ions;
 pane_hndlr_display_graph_params_t * gr_temperature;
 pane_hndlr_display_graph_params_t * gr_nd_atoms;    
 
@@ -150,6 +161,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
     #define SDL_EVENT_MOUSE_WHEEL  (SDL_EVENT_USER_DEFINED+1)
     #define SDL_EVENT_STATE_SELECT (SDL_EVENT_USER_DEFINED+3)
     #define SDL_EVENT_GRID_SELECT  (SDL_EVENT_USER_DEFINED+4)
+    #define SDL_EVENT_RESET        (SDL_EVENT_USER_DEFINED+5)
 
     #define STATE_STR \
         (model_is_running() ? "RUNNING" : "STOPPED")
@@ -189,60 +201,36 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
 
     if (request == PANE_HANDLER_REQ_RENDER) {
 
-        // render the points
+        // render the location of the atoms & ions in the chamber 
+        // which are located near z equals 0
         {
         #define MAX_POINTS 1000
         #define POINT_SIZE 1
         #define ATOM_COLOR BLUE
         #define ION_COLOR  RED
 
-        int32_t      idx1, idx2, x, y;
-        particle_t * p;
-        cell_t   *   c;
-        point_t      points_atom[MAX_POINTS];
-        point_t      points_ion[MAX_POINTS];
-        int32_t      max_points_atom = 0, max_points_ion = 0;
+        point_t points[MAX_POINTS];
+        int32_t i, max_points;
 
-        for (idx1 = 0; idx1 < MAX_CELL; idx1++) {
-            for (idx2 = 0; idx2 < MAX_CELL; idx2++) {
-
-                // xxx max_cell must be even  ??
-                // xxx also c+1
-                c = &cell[idx1][idx2][MAX_CELL/2];
-
-                // xxx this needs locking
-                LIST_FOREACH(p, &c->particle_list_head, cell_entries) {
-                    x = pane->w/2 + (p->x + vars->x_offset) / vars->meters_per_pixel; 
-                    y = pane->h/2 + (p->y + vars->y_offset) / vars->meters_per_pixel;
-                    // xxx assert(p->z >= 0 && p->z < CELL_SIZE);
-
-                    if (!p->ion) {
-                        points_atom[max_points_atom].x = x;
-                        points_atom[max_points_atom].y = y;
-                        max_points_atom++;
-                        if (max_points_atom == MAX_POINTS) {
-                            sdl_render_points(pane, points_atom, max_points_atom, ATOM_COLOR, POINT_SIZE);
-                            max_points_atom = 0;
-                        }
-                    } else {
-                        points_ion[max_points_ion].x = x;
-                        points_ion[max_points_ion].y = y;
-                        max_points_ion++;
-                        if (max_points_ion == MAX_POINTS) {
-                            sdl_render_points(pane, points_ion, max_points_ion, ION_COLOR, POINT_SIZE);
-                            max_points_ion = 0;
-                        }
-                    }
-                }
+        max_points = 0;
+        for (i = 0; i < loc_atoms->max; i++) {
+            points[max_points].x = pane->w/2 + (loc_atoms->loc[i].x + vars->x_offset) / vars->meters_per_pixel; 
+            points[max_points].y = pane->h/2 + (loc_atoms->loc[i].y + vars->y_offset) / vars->meters_per_pixel;
+            max_points++;
+            if (max_points == MAX_POINTS || i == loc_atoms->max-1) {
+                sdl_render_points(pane, points, max_points, ATOM_COLOR, POINT_SIZE);
+                max_points = 0;
             }
         }
-        if (max_points_atom > 0) {
-            sdl_render_points(pane, points_atom, max_points_atom, ATOM_COLOR, POINT_SIZE);
-            max_points_atom = 0;
-        }
-        if (max_points_ion > 0) {
-            sdl_render_points(pane, points_ion, max_points_ion, ION_COLOR, POINT_SIZE);
-            max_points_ion = 0;
+        max_points = 0;
+        for (i = 0; i < loc_ions->max; i++) {
+            points[max_points].x = pane->w/2 + (loc_ions->loc[i].x + vars->x_offset) / vars->meters_per_pixel; 
+            points[max_points].y = pane->h/2 + (loc_ions->loc[i].y + vars->y_offset) / vars->meters_per_pixel;
+            max_points++;
+            if (max_points == MAX_POINTS || i == loc_ions->max-1) {
+                sdl_render_points(pane, points, max_points, ATOM_COLOR, POINT_SIZE);
+                max_points = 0;
+            }
         }
         }
 
@@ -256,25 +244,39 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
                 int32_t xpane, ypane_min, ypane_max;
                 tmp = r_squared - x*x;
                 if (tmp < 0) continue;
-                tmp = sqrt(tmp);
+                tmp = sqrtf(tmp);
                 ypane_min = pane->h/2 + (vars->y_offset - tmp) / vars->meters_per_pixel;
                 ypane_max = pane->h/2 + (vars->y_offset + tmp) / vars->meters_per_pixel;
                 if (ypane_min < 0) ypane_min = 0;
                 if (ypane_max > pane->h-1) ypane_max = pane->h-1;
                 xpane = pane->w/2 + (x + vars->x_offset) / vars->meters_per_pixel; 
                 sdl_render_line(pane, xpane, ypane_min, xpane, ypane_max, GRAY);
+                if (fabs(x) < CELL_SIZE/10) {
+                    ypane_min = pane->h/2 + (vars->y_offset - CELL_SIZE) / vars->meters_per_pixel;
+                    ypane_max = pane->h/2 + (vars->y_offset + CELL_SIZE) / vars->meters_per_pixel;
+                    if (ypane_min < 0) ypane_min = 0;
+                    if (ypane_max > pane->h-1) ypane_max = pane->h-1;
+                    sdl_render_line(pane, xpane, ypane_min, xpane, ypane_max, RED);
+                }
             }
             for (y = -r; y <= r; y += CELL_SIZE) {
                 int32_t ypane, xpane_min, xpane_max;
                 tmp = r_squared - y*y;
                 if (tmp < 0) continue;
-                tmp = sqrt(tmp);
+                tmp = sqrtf(tmp);
                 xpane_min = pane->w/2 + (vars->x_offset - tmp) / vars->meters_per_pixel;
                 xpane_max = pane->w/2 + (vars->x_offset + tmp) / vars->meters_per_pixel;
                 if (xpane_min < 0) xpane_min = 0;
                 if (xpane_max > pane->w-1) xpane_max = pane->w-1;
                 ypane = pane->h/2 + (y + vars->y_offset) / vars->meters_per_pixel; 
                 sdl_render_line(pane, xpane_min, ypane, xpane_max, ypane, GRAY);
+                if (fabs(y) < CELL_SIZE/10) {
+                    xpane_min = pane->w/2 + (vars->x_offset - CELL_SIZE) / vars->meters_per_pixel;
+                    xpane_max = pane->w/2 + (vars->x_offset + CELL_SIZE) / vars->meters_per_pixel;
+                    if (xpane_min < 0) xpane_min = 0;
+                    if (xpane_max > pane->w-1) xpane_max = pane->w-1;
+                    sdl_render_line(pane, xpane_min, ypane, xpane_max, ypane, RED);
+                }
             }
         }
         }
@@ -293,7 +295,6 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         }
 
         // determine the model progress rate, model_secs_per_wall_sec
-        // xxx smoother, running avg ?
         if (model_is_running()) {
             double time_wall_secs = microsec_timer() / 1000000.;
             if (vars->time_wall_secs_last == 0) {
@@ -332,6 +333,8 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
             SDL_EVENT_STATE_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(3,1), 1, "GRID", LIGHT_BLUE, BLACK, 
             SDL_EVENT_GRID_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(4,1), 1, "R", LIGHT_BLUE, BLACK, 
+            SDL_EVENT_RESET, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
 
         // return
@@ -365,6 +368,12 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
             return PANE_HANDLER_RET_DISPLAY_REDRAW;
         case SDL_EVENT_GRID_SELECT:
             vars->grid = !vars->grid;
+            return PANE_HANDLER_RET_DISPLAY_REDRAW;
+        case SDL_EVENT_RESET:
+            vars->x_offset = 0;
+            vars->y_offset = 0;
+            vars->width = params.chamber_radius * 2;
+            vars->meters_per_pixel = vars->width / pane->w;
             return PANE_HANDLER_RET_DISPLAY_REDRAW;
         }
         return PANE_HANDLER_RET_NO_ACTION;
@@ -440,17 +449,13 @@ static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * in
     return PANE_HANDLER_RET_NO_ACTION;
 }
 
-// XXX continue here
 static void display_start(void * display_cx)
 {
     bool running = model_is_running();
-    pane_hndlr_display_graph_params_t *g;
-    int32_t i, max_points_needed;
-    bool init;
 
-    // xxx overview comment
+    // XXX overview comment
 
-    // XXX check time since last< don't exceed XXX
+    // XXX check time since last< don't exceed
 
     // if the model is running then stop the model so that
     // model data can be safely gathered
@@ -458,10 +463,59 @@ static void display_start(void * display_cx)
         model_stop();
     }
 
-    // XXX particle pancake data 
+    // create list of atom/ion locations with z approx 0
+    // XXX max_cell must be even  ??
+    {
+    int32_t x_idx, y_idx;
+    cell_t * c;
+    particle_t * p;
+    if (loc_atoms == NULL) {
+        loc_atoms = malloc(sizeof(*loc_atoms) + 1000000*sizeof(struct loc_s));
+        loc_atoms->max = 0;
+        loc_atoms->max_alloced = 1000000;
+    }
+    loc_atoms->max = 0;
+    if (loc_ions == NULL) {
+        loc_ions = malloc(sizeof(*loc_ions) + 1000000*sizeof(struct loc_s));
+        loc_ions->max = 0;
+        loc_ions->max_alloced = 1000000;
+    }
+    loc_ions->max = 0;
+    for (x_idx = 0; x_idx < MAX_CELL; x_idx++) {
+        for (y_idx = 0; y_idx < MAX_CELL; y_idx++) {
+            c = &cell[x_idx][y_idx][MAX_CELL/2];
+            LIST_FOREACH(p, &c->particle_list_head, cell_entries) {
+                assert(p->z >= 0 && p->z < CELL_SIZE);
+                if (!p->ion) {
+                    loc_atoms->loc[loc_atoms->max].x = p->x;
+                    loc_atoms->loc[loc_atoms->max].y = p->y;
+                    loc_atoms->max++;
+                    if (loc_atoms->max == loc_atoms->max_alloced) {
+                        loc_atoms->max_alloced += 1000000;
+                        loc_atoms = realloc(loc_atoms, 
+                                            sizeof(*loc_atoms) + loc_atoms->max_alloced*sizeof(struct loc_s));
+                        DEBUG("XXX realloced loc_atoms  %d\n", loc_atoms->max_alloced);
+                    }
+                } else {
+                    loc_ions->loc[loc_ions->max].x = p->x;
+                    loc_ions->loc[loc_ions->max].y = p->y;
+                    loc_ions->max++;
+                    if (loc_ions->max == loc_ions->max_alloced) {
+                        loc_ions->max_alloced += 1000000;
+                        loc_ions = realloc(loc_ions, 
+                                            sizeof(*loc_ions) + loc_ions->max_alloced*sizeof(struct loc_s));
+                        DEBUG("XXX realloced loc_ions  %d\n", loc_ions->max_alloced);
+                    }
+                }
+            }
+        }
+    }
+    }
 
     // graph x=radius y=temperature  
-    init = false;
+    {
+    int32_t i, max_points_needed;
+    bool init = false;
     max_points_needed = max_shell;
     if (gr_temperature == NULL || (gr_temperature)->max_points_alloced < max_points_needed) {
         free(gr_temperature);
@@ -470,7 +524,7 @@ static void display_start(void * display_cx)
                    max_points_needed * sizeof(struct pane_hndlr_display_graph_point_s));
         init = true;
     }
-    g = gr_temperature;
+    pane_hndlr_display_graph_params_t * g = gr_temperature;
     if (init) {
         strcpy(g->title_str, "TEMPERATURE");
         strcpy(g->x_units_str, "METERS");
@@ -488,9 +542,12 @@ static void display_start(void * display_cx)
         g->points[i].y = temperature;
     }
     g->max_points = max_points_needed;
+    }
 
     // graph x=radius y=nd_atoms  
-    init = false;
+    {
+    int32_t i, max_points_needed;
+    bool init = false;
     max_points_needed = max_shell;
     if (gr_nd_atoms == NULL || (gr_nd_atoms)->max_points_alloced < max_points_needed) {
         free(gr_nd_atoms);
@@ -499,7 +556,7 @@ static void display_start(void * display_cx)
                    max_points_needed * sizeof(struct pane_hndlr_display_graph_point_s));
         init = true;
     }
-    g = gr_nd_atoms;
+    pane_hndlr_display_graph_params_t * g = gr_nd_atoms;
     if (init) {
         strcpy(g->title_str, "ND_ATOMS");
         strcpy(g->x_units_str, "METERS");
@@ -515,6 +572,7 @@ static void display_start(void * display_cx)
         g->points[i].y = shell[i].number_of_atoms * num_real_particles_per_sim_particle / shell[i].volume;
     }
     g->max_points = max_points_needed;
+    }
 
     // if was running then resume the model
     if (running) {

@@ -35,13 +35,13 @@
 // kinetic temperature
 // http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/kintem.html
 #define K 1.38066e-23  // Boltzmann constant Joules/Kelvin
-#define TEMPERATURE_TO_VELOCITY(t,m)    (sqrt((t) * (3. * K / (m))))     // XXX use float version ?
+#define TEMPERATURE_TO_VELOCITY(t,m)    (sqrtf((t) * (3. * K / (m))))
 #define VELOCITY_TO_TEMPERATURE(v,m)    (((m) / (3. * K)) * (v) * (v))
 #define V_SQUARED_TO_TEMPERATURE(vsq,m) (((m) / (3. * K)) * (vsq))
 
 // kinetic energy
 #define KINETIC_ENERGY(m,v)              (0.5 * (m) * (v) * (v))
-#define KINETIC_ENERGY_TO_VELOCITY(ke,m) (sqrt(2. * (ke) / (m)))       // XXX use float version
+#define KINETIC_ENERGY_TO_VELOCITY(ke,m) (sqrtf(2. * (ke) / (m)))
 
 // ideal gas law
 // http://hyperphysics.phy-astr.gsu.edu/hbase/Kinetic/idegas.html
