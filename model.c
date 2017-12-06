@@ -47,17 +47,15 @@
 // variables
 //
 
-static int32_t         model_state = STATE_STOPPED;
-static pthread_cond_t  model_state_cond = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t model_state_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-static int32_t         model_state_request = STATE_NO_REQUEST;
-static pthread_cond_t  model_state_request_cond = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t model_state_request_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 static bool model_thread_started;
-
 static float roomtemp_d_velocity;
+
+static bool model_stop_req  = true;
+static bool model_stopped   = true;
+static bool model_step_req  = false;
+static bool model_stepping  = false;
+static bool model_pause_req = false;
+static bool model_paused    = false;
  
 //
 // prototypes
@@ -70,7 +68,7 @@ static void * model_thread(void * cx);
 // inline functions
 //
 
-// xxx comment
+// XXX comment
 static inline cell_t * get_cell(float x, float y, float z)
 {
     cell_t * c;
@@ -95,7 +93,7 @@ static inline cell_t * get_cell(float x, float y, float z)
     return c;
 }
 
-// xxx comment
+// XXX comment
 static inline void random_location_within_chamber(float *x, float *y, float *z, cell_t **c)
 {
     float x_try, y_try, z_try;
@@ -138,7 +136,7 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
     DEBUG("FLT_MAX           = %e\n", FLT_MAX);
     DEBUG("FLT_MIN           = %e\n", FLT_MIN);
 
-    // xxx comment and mcmodel
+    // XXX comment and mcmodel
     // -mcmodel=medium
     particles = calloc(MAX_PARTICLES, sizeof(particle_t));
     if (particles == NULL) {
@@ -250,7 +248,7 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
                 c->shell->volume += CELL_VOLUME;
                 num_cell_in_chamber++;
 
-                // xxx
+                // XXX
                 if (shell_idx + 1 > max_shell) {
                     max_shell = shell_idx + 1;
                 }
@@ -323,7 +321,7 @@ static void init_particle(particle_t * p)
     p->vx = vx;
     p->vy = vy;
     p->vz = vz;
-    p->v = roomtemp_d_velocity;   // xxx use a range Maxwell Boltzman
+    p->v = roomtemp_d_velocity;   // XXX use a range Maxwell Boltzman
     p->v_squared = p->v * p->v;
 
     // init particle cell_entries field,
@@ -331,7 +329,8 @@ static void init_particle(particle_t * p)
     LIST_INSERT_HEAD(&c->particle_list_head, p, cell_entries);
 
     // init the remaining particle fields, 
-    // except for the work_entries field which is left as null XXX maybe it could go on the queue here
+    // except for the work_entries field which is left as null 
+    // XXX maybe it could go on the queue here
     p->ion = false;
     p->cell = c;
     p->time_last_processed = 0;
@@ -343,42 +342,64 @@ static void init_particle(particle_t * p)
 
 // -----------------  MODEL CONTROL API  -------------------------------------------------
 
-void model_start(void)
-{
-    pthread_mutex_lock(&model_state_request_mutex);
-    model_state_request = STATE_RUNNING;
-    pthread_cond_signal(&model_state_request_cond);
-    pthread_mutex_unlock(&model_state_request_mutex);
+// set the model state to running or stopped
 
-    pthread_mutex_lock(&model_state_mutex);
-    while (model_state != STATE_RUNNING) {
-        pthread_cond_wait(&model_state_cond, &model_state_mutex);
-    }
-    pthread_mutex_unlock(&model_state_mutex);
+void model_run(void)
+{
+    model_stop_req = false;
+    do {
+        __sync_synchronize();
+    } while (model_stopped == true);
 }
 
 void model_stop(void)
 {
-    pthread_mutex_lock(&model_state_request_mutex);
-    model_state_request = STATE_STOPPED;
-    pthread_cond_signal(&model_state_request_cond);
-    pthread_mutex_unlock(&model_state_request_mutex);
-
-    pthread_mutex_lock(&model_state_mutex);
-    while (model_state != STATE_STOPPED) {
-        pthread_cond_wait(&model_state_cond, &model_state_mutex);
-    }
-    pthread_mutex_unlock(&model_state_mutex);
+    model_stop_req = true;
+    do {
+        __sync_synchronize();
+    } while (model_stopped == false);
 }
 
 bool model_is_running(void) 
 {
-    return (model_state == STATE_RUNNING);
+    __sync_synchronize();
+    return !model_stopped;
 }
 
-void model_terminate(void)
+// single step the model;
+// the single step request should only be used if the model is stopped
+
+void model_step(void)
 {
-    model_stop();
+    model_step_req = true;
+    __sync_synchronize();
+}
+
+bool model_is_stepping(void) 
+{
+    __sync_synchronize();
+    return model_stepping;
+}
+
+// pause and resume are used by the display code to quickly pause
+// the model, gather model info from the model's global data, and
+// then resume the model; pause/resume can be called when the model
+// is stopped but are not necessary in that case
+
+void model_pause(void)
+{
+    model_pause_req = true;
+    do {
+        __sync_synchronize();
+    } while (model_paused == false);
+}
+
+void model_resume(void)
+{
+    model_pause_req = false;
+    do {
+        __sync_synchronize();
+    } while (model_paused == true);
 }
 
 // -----------------  MODEL_THREAD  ----------------------------------------------------------
@@ -396,44 +417,66 @@ static void * model_thread(void * cx)
     struct wlh_s * wlh;
     particle_t * p;
     int32_t i;
+    bool did_work;
 
     DEBUG("initializing\n");  // XXX move to init routine
     for (i = 0; i < MAX_WORK_LIST_HEAD; i++) {
         LIST_INIT(&work_list_head[i]);
     }
     for (i = 0; i < max_particles; i++) {
-        LIST_INSERT_HEAD(&work_list_head[i%MAX_WORK_LIST_HEAD], &particles[i], work_entries);
+        // XXX
+        //LIST_INSERT_HEAD(&work_list_head[i%MAX_WORK_LIST_HEAD], &particles[i], work_entries);
+        LIST_INSERT_HEAD(&work_list_head[0], &particles[i], work_entries);
     }
 
     DEBUG("starting\n");
     model_thread_started = true;
 
     while (true) {
-        // process model state change request (to stop or run the model);
-        // if the model is stopped then remain in this code block until 
-        // the model state is set to running
-        while (model_state == STATE_STOPPED || model_state_request != STATE_NO_REQUEST) {
-            int32_t new_state;
-
-            pthread_mutex_lock(&model_state_request_mutex);
-            while (model_state_request == STATE_NO_REQUEST) {
-                pthread_cond_wait(&model_state_request_cond, &model_state_request_mutex);
+        // wait here while model is stopped
+        // - while in this loop acknowledge pause request; 
+        //   however, since the model is stopped nothing else needs
+        //   to be done to handle the pause request
+        // - break out of this loop when the model is not stopped (aka running)
+        //   or a request to single step the is present
+        while (true) {
+            __sync_synchronize();
+            model_stopped = model_stop_req;
+            model_paused  = model_pause_req;
+            model_stepping = model_step_req;
+            __sync_synchronize();
+            if (model_paused) {
+                continue;
             }
-            new_state = model_state_request;
-            model_state_request = STATE_NO_REQUEST;
-            pthread_mutex_unlock(&model_state_request_mutex);
-
-            pthread_mutex_lock(&model_state_mutex);
-            model_state = new_state;
-            pthread_cond_signal(&model_state_cond);
-            pthread_mutex_unlock(&model_state_mutex);
+            if (!model_stopped || model_stepping) {
+                break;
+            }
+            usleep(1000);
         }
 
         // process the particles on this list;
         // when done all particles will have been moved to other work lists
         wlh = &work_list_head[wlh_idx];
-        while ((p = wlh->lh_first) != NULL) {
+        did_work = !LIST_EMPTY(wlh);
+        while ((p = LIST_FIRST(wlh)) != NULL) {
+            // handle pause request
+            if (model_pause_req) {
+                do {
+                    __sync_synchronize();
+                    model_paused = model_pause_req;
+                    __sync_synchronize();
+                } while (model_paused);
+            }
+
+            // process particle 
             process_particle(p);
+        }
+
+        // if some particles have been processed then clear model step flags
+        if (did_work) {
+            model_stepping = false;
+            model_step_req = false;
+            __sync_synchronize();
         }
 
         // increment the time, and the wlh_idx
@@ -461,8 +504,10 @@ static void schedule_work(particle_t *p, float delta_t)
     assert(delta_t > 0);
     nf = delta_t / MODEL_TIME_INCREMENT;
     if (nf > MAX_WORK_LIST_HEAD-1) {
+        // XXX debug print
         n = MAX_WORK_LIST_HEAD-1;
     } else if (nf < 1) {
+        // XXX debug print
         n = 1;
     } else {
         n = nf;
@@ -481,7 +526,7 @@ static void process_particle(particle_t *p)
     particle_t *ptgt;
 
     // XXX try prefetch the particle, and the ptgt
-    // xxx summary comment
+    // XXX summary comment
 
     // determine the time since this particle's last interaction 
     t = time_model_secs - p->time_last_processed;
@@ -491,18 +536,18 @@ static void process_particle(particle_t *p)
     y = p->y + p->vy * t;
     z = p->z + p->vz * t;
 
-    // xxx
+    // XXX
     cur_cell  = p->cell;
     cur_shell = cur_cell->shell;
     new_cell  = get_cell(x, y, z);
 
     // if the new particle location (x,y,z) is not within the chamber then
     // - pick a new velocity vector that is within the chamber .025 m
-    // - xxx  update the comments here
+    // - XXX  update the comments here
     // - return
     if (new_cell == NULL) {
         float old_v_squared = p->v_squared;
-        float new_v = roomtemp_d_velocity;    // xxx use range
+        float new_v = roomtemp_d_velocity;    // XXX use range
         float f = new_v / p->v;
 
         p->vx = -p->vx * f;
@@ -521,18 +566,18 @@ static void process_particle(particle_t *p)
         return;
     }
 
-    // xxx
+    // XXX
     new_shell = new_cell->shell;
 
     // choose a random particle in the new_cell;
     // ensure it is different than p
-    // xxx if (__glibc_unlikely(new_cell->radius_idx >= max_shell)) {
+    // XXX if (__glibc_unlikely(new_cell->radius_idx >= max_shell)) {
     ptgt = new_cell->particle_list_head.lh_first;
     if (ptgt == p) {
         ptgt = LIST_NEXT(p, cell_entries);
     }
 
-    // xxx improve this debug code
+    // XXX improve this debug code
     static uint64_t okay, notokay;
     if (ptgt) {
         okay++;
@@ -543,7 +588,7 @@ static void process_particle(particle_t *p)
         DEBUG("XXX %12ld %12ld : %f\n", okay, notokay, (float)notokay/okay);
     }
 
-    // xxx comment
+    // XXX comment
     p_orig_v_squared = p->v_squared;
 
     // both p and ptgt will be given the same velocity, by conservation of energy;
@@ -556,7 +601,7 @@ static void process_particle(particle_t *p)
         new_v_squared = p->v_squared;
     }
 
-    // xxx optimize
+    // XXX optimize
     // XXX BUG 
     //     (gdb) print *new_shell
     //     $3 = {volume = 7.99999977e-09, number_of_atoms = 0, number_of_ions = 0, sum_v_squared = 91.75, ionization_event_count = 0, 
@@ -570,7 +615,8 @@ static void process_particle(particle_t *p)
 
     nd = new_shell->number_of_atoms * num_real_particles_per_sim_particle / new_shell->volume;
     mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
-    t = mfp / new_v;  // xxx get 2 new velocities
+    t = mfp / new_v;  // XXX get 2 new velocities
+    //DEBUG("t %e  mfp %f  new_v %f\n", t, mfp, new_v);
 
     // update p
     p->x = x;
@@ -603,7 +649,7 @@ static void process_particle(particle_t *p)
     }
 
     // update shell
-    // xxx comments
+    // XXX comments
     if (new_shell != cur_shell) {
         cur_shell->sum_v_squared -= p_orig_v_squared;
         new_shell->sum_v_squared += p_orig_v_squared;

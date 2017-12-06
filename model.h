@@ -105,9 +105,12 @@ double       time_model_secs;
 
 void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
         float grid_voltage, float grid_current);
-void model_start(void);
+void model_run(void);
 void model_stop(void);
 bool model_is_running(void);
-void model_terminate(void);
+void model_step(void);
+bool model_is_stepping(void);
+void model_pause(void);
+void model_resume(void);
 
 #endif

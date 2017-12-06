@@ -40,14 +40,14 @@ typedef struct {
         float x;
         float y;
     } loc[0];
-} particle_location_t;
+} loc_list_t;
 
 //
 // variables
 //
 
-particle_location_t               * loc_atoms;
-particle_location_t               * loc_ions;
+loc_list_t                        * loc_atoms;
+loc_list_t                        * loc_ions;
 pane_hndlr_display_graph_params_t * gr_temperature;
 pane_hndlr_display_graph_params_t * gr_nd_atoms;    
 
@@ -140,9 +140,6 @@ int main(int argc, char **argv)
         pane_hndlr_display_graph,  &gr_temperature, 800,   0, 550, 200, PANE_BORDER_STYLE_MINIMAL,
         pane_hndlr_display_graph,  &gr_nd_atoms,    800, 200, 550, 200, PANE_BORDER_STYLE_MINIMAL);
 
-    // terminate the model
-    model_terminate();
-
     // terminate 
     return 0;
 }
@@ -159,7 +156,8 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
 {
     #define SDL_EVENT_MOUSE_MOTION (SDL_EVENT_USER_DEFINED+0)
     #define SDL_EVENT_MOUSE_WHEEL  (SDL_EVENT_USER_DEFINED+1)
-    #define SDL_EVENT_STATE_SELECT (SDL_EVENT_USER_DEFINED+3)
+    #define SDL_EVENT_STATE_SELECT (SDL_EVENT_USER_DEFINED+2)
+    #define SDL_EVENT_STEP_SELECT  (SDL_EVENT_USER_DEFINED+3)
     #define SDL_EVENT_GRID_SELECT  (SDL_EVENT_USER_DEFINED+4)
     #define SDL_EVENT_RESET        (SDL_EVENT_USER_DEFINED+5)
 
@@ -331,9 +329,13 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
         sdl_register_event(pane, &locf, SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
         sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(2,1), 1, STATE_STR, LIGHT_BLUE, BLACK, 
             SDL_EVENT_STATE_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(3,1), 1, "GRID", LIGHT_BLUE, BLACK, 
+        if (!model_is_running() && !model_is_stepping()) {
+            sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(3,1), 1, "STEP", LIGHT_BLUE, BLACK, 
+                SDL_EVENT_STEP_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+        }
+        sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(4,1), 1, "GRID", LIGHT_BLUE, BLACK, 
             SDL_EVENT_GRID_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-        sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(4,1), 1, "R", LIGHT_BLUE, BLACK, 
+        sdl_render_text_and_register_event(pane, COL2X(0,1), ROW2Y(5,1), 1, "R", LIGHT_BLUE, BLACK, 
             SDL_EVENT_RESET, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
         }
 
@@ -363,8 +365,11 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
             if (model_is_running()) {
                 model_stop();
             } else {
-                model_start();
+                model_run();
             }
+            return PANE_HANDLER_RET_DISPLAY_REDRAW;
+        case SDL_EVENT_STEP_SELECT:
+            model_step();
             return PANE_HANDLER_RET_DISPLAY_REDRAW;
         case SDL_EVENT_GRID_SELECT:
             vars->grid = !vars->grid;
@@ -374,6 +379,7 @@ static int32_t pane_hndlr_chamber(pane_cx_t * pane_cx, int32_t request, void * i
             vars->y_offset = 0;
             vars->width = params.chamber_radius * 2;
             vars->meters_per_pixel = vars->width / pane->w;
+            vars->grid = false;
             return PANE_HANDLER_RET_DISPLAY_REDRAW;
         }
         return PANE_HANDLER_RET_NO_ACTION;
@@ -451,17 +457,12 @@ static int32_t pane_hndlr_params(pane_cx_t * pane_cx, int32_t request, void * in
 
 static void display_start(void * display_cx)
 {
-    bool running = model_is_running();
-
     // XXX overview comment
 
     // XXX check time since last< don't exceed
 
-    // if the model is running then stop the model so that
-    // model data can be safely gathered
-    if (running) {
-        model_stop();
-    }
+    // pause the model
+    model_pause();
 
     // create list of atom/ion locations with z approx 0
     // XXX max_cell must be even  ??
@@ -574,10 +575,8 @@ static void display_start(void * display_cx)
     g->max_points = max_points_needed;
     }
 
-    // if was running then resume the model
-    if (running) {
-        model_start();
-    }
+    // resume the model
+    model_resume();
 }
 
 static void display_end(void * display_cx)
