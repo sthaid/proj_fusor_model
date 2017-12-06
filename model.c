@@ -1,3 +1,25 @@
+// XXX review the use of integer and real constants in floating point expressions
+//   https://stackoverflow.com/questions/5026570/suffix-of-f-on-float-value
+//      float x;
+//      ...
+//      float y = x * 2.0;
+//
+//      Then x will be promoted to a double, because 2.0 is a double. The compiler is 
+//      not allowed to optimize that promotion away or it would violate the C standard. 
+//      The calculation takes place with double precision, and then the result is then 
+//      implicitly truncated into a float. This means that the calculation will be slower 
+//      (though more accurate) than it would have been if you had written 2.0f or 2.
+//      
+//      Had you written 2, the constant would be of int type, which would be promoted 
+//      to a float, and the calculation would have been done with "float precision". 
+//      A good compiler would warn you about this promotion.
+//      
+//      Read more about the "usual arithmetic conversion" rules here:
+//      
+//      http://msdn.microsoft.com/en-us/library/3t4w2bkb%28v=vs.80%29.aspx
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -122,19 +144,24 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
     int32_t ret;
 
     // debug print sizes
-    DEBUG("MAX_PARTICLES     = %d\n", MAX_PARTICLES);
-    DEBUG("MAX_CELL          = %d\n", MAX_CELL);
-    DEBUG("MAX_SHELL         = %d\n", MAX_SHELL);
-    DEBUG("sizeof(particles) = %ld MB\n", sizeof(particles) / MB);
-    DEBUG("sizeof(cell)      = %ld MB\n", sizeof(cell) / MB);
-    DEBUG("sizeof(shell)     = %ld MB\n", sizeof(shell) / MB);
-    DEBUG("sizeof(double)    = %ld bytes\n", sizeof(double));
-    DEBUG("sizeof(float)     = %ld bytes\n", sizeof(float));
-    DEBUG("sizeof(1.23)      = %ld bytes\n", sizeof(1.23));
-    DEBUG("DBL_MAX           = %e\n", DBL_MAX);
-    DEBUG("DBL_MIN           = %e\n", DBL_MIN);
-    DEBUG("FLT_MAX           = %e\n", FLT_MAX);
-    DEBUG("FLT_MIN           = %e\n", FLT_MIN);
+    DEBUG("MAX_PARTICLES         = %d\n", MAX_PARTICLES);
+    DEBUG("MAX_CELL              = %d\n", MAX_CELL);
+    DEBUG("MAX_SHELL             = %d\n", MAX_SHELL);
+    DEBUG("sizeof(particles)     = %ld MB\n", sizeof(particles) / MB);
+    DEBUG("sizeof(cell)          = %ld MB\n", sizeof(cell) / MB);
+    DEBUG("sizeof(shell)         = %ld MB\n", sizeof(shell) / MB);
+    DEBUG("sizeof(double)        = %ld bytes\n", sizeof(double));
+    DEBUG("sizeof(float)         = %ld bytes\n", sizeof(float));
+    DEBUG("sizeof(1.23)          = %ld bytes\n", sizeof(1.23));
+    DEBUG("sizeof(1.23f)         = %ld bytes\n", sizeof(1.23f));
+    DEBUG("sizeof(1*1.23f)       = %ld bytes\n", sizeof(1*1.23f));
+    DEBUG("sizeof(1.*1.23f))     = %ld bytes\n", sizeof(1.*1.23f));
+    DEBUG("sizeof(RAND_MAX*1.))  = %ld bytes\n", sizeof(RAND_MAX*1.));
+    DEBUG("sizeof(RAND_MAX*1.f)) = %ld bytes\n", sizeof(RAND_MAX*1.f));
+    DEBUG("DBL_MAX               = %e\n", DBL_MAX);
+    DEBUG("DBL_MIN               = %e\n", DBL_MIN);
+    DEBUG("FLT_MAX               = %e\n", FLT_MAX);
+    DEBUG("FLT_MIN               = %e\n", FLT_MIN);
 
     // XXX comment and mcmodel
     // -mcmodel=medium

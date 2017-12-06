@@ -108,6 +108,7 @@ int do_send(int sockfd, void * send_buff, size_t len);
 // -----------------  RANDOM NUMBERS  ------------------------------------
 
 float random_range(float min, float max);
+float random_triangular(float min, float max);
 void random_vector(float magnitude, float * x, float * y, float * z);
 
 // -----------------  MATH  ----------------------------------------------

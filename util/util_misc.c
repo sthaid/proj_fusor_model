@@ -307,10 +307,27 @@ int do_send(int sockfd, void * send_buff, size_t len)
 
 // -----------------  RANDOM NUMBERS  ------------------------------------
 
-// returns random float value in range min to max inclusive
+// return uniformly distributed random numbers in range min to max inclusive
 float random_range(float min, float max)
 {
     return ((float)random() / RAND_MAX) * (max - min) + min;
+}
+
+// return triangular distributed random numbers in range min to max inclusive
+// Refer to:
+// - http://en.wikipedia.org/wiki/Triangular_distribution
+// - http://stackoverflow.com/questions/3510475/generate-random-numbers-according-to-distributions
+float random_triangular(float min, float max)
+{
+    float range = max - min;
+    float range_squared_div_2 = range * range / 2;
+    float U = (float)random() / RAND_MAX;   // 0 - 1 uniform
+
+    if (U <= 0.5) {
+        return min + sqrtf(U * range_squared_div_2);
+    } else {
+        return max - sqrtf((1.f - U) * range_squared_div_2);
+    }
 }
 
 // returns a vector whose length equals 'magnitude' and with a random direction
