@@ -331,7 +331,7 @@ void model_init(float chamber_radius, float grid_radius, float chamber_pressure,
 
 static void init_particle(particle_t * p)
 {
-    float x, y, z, vx, vy, vz;
+    float x, y, z, v, vx, vy, vz;
     cell_t *c;
 
     // get a random location within the chamber
@@ -339,7 +339,13 @@ static void init_particle(particle_t * p)
 
     // get a random velocity for this particle;
     // the direction is random, the magnitude is room temperature for D atom
-    random_vector(roomtemp_d_velocity, &vx, &vy, &vz);
+    v = random_triangular(100, 2*roomtemp_d_velocity);
+    random_vector(v, &vx, &vy, &vz);
+    
+    static int count;
+    if (count++ < 100) {
+        printf("%f\n", v);
+    }
 
     // init particle position and velocity fields
     p->x = x;
@@ -348,8 +354,8 @@ static void init_particle(particle_t * p)
     p->vx = vx;
     p->vy = vy;
     p->vz = vz;
-    p->v = roomtemp_d_velocity;   // XXX use a range Maxwell Boltzman
-    p->v_squared = p->v * p->v;
+    p->v = v;
+    p->v_squared = v * v;
 
     // init particle cell_entries field,
     // add the particle to the cell that it is contained in
@@ -640,8 +646,12 @@ static void process_particle(particle_t *p)
     //     (gdb) print new_shell-shell
     //     $6 = 0
 
+#if 0
     nd = new_shell->number_of_atoms * num_real_particles_per_sim_particle / new_shell->volume;
     mfp = MEAN_FREE_PATH(H2_CROSS_SECTION,nd);
+#else
+    mfp = 0.003855;
+#endif
     t = mfp / new_v;  // XXX get 2 new velocities
     //DEBUG("t %e  mfp %f  new_v %f\n", t, mfp, new_v);
 
